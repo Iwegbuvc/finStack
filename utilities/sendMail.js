@@ -1,32 +1,34 @@
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST, // should be smtp.gmail.com
-  port: process.env.SMTP_PORT, // should be 587
-  secure: false, // use STARTTLS (true = 465, false = 587)
+  host: process.env.SMTP_HOST,
+  port: process.env.SMTP_POR,
   auth: {
-    user: process.env.EMAIL_ADDRESS,   // your Gmail
-    pass: process.env.EMAIL_PASSWORD,  // your Gmail App Password
+    user: process.env.EMAIL_ADDRESS,
+    pass: process.env.EMAIL_PASSWORD
   },
   tls: {
-    rejectUnauthorized: false, // allow self-signed certs (avoid SSL issues on Render)
-  },
-});
+    rejectUnauthorized: false
+  }
+})
+
 
 const sendMail = async (to, subject, html) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_ADDRESS,
-      to,
-      subject,
-      html,
-    };
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_ADDRESS,
+            to,
+            subject,
+            html
+        }
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Email sent to ${to}`);
-  } catch (error) {
-    console.error('Error sending email:', error);
-  }
-};
+        await transporter.sendMail(mailOptions)
+    } catch (error) {
+        console.error('Error sending email:', error)
+    }
+}
 
-module.exports = sendMail;
+module.exports = sendMail
+
+
+
