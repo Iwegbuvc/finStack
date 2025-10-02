@@ -4,6 +4,7 @@ const cookieParser = require('cookie-parser');
 
 const connectDataBase = require('./config/db');
 const authRoutes = require("./routes/authRoutes")
+const kycRoutes = require("./routes/kycRoutes")
 
 
 const app = express();
@@ -21,6 +22,7 @@ app.use(cookieParser());
 
 // Routes
 app.use("/api", authRoutes)
+app.use("/api", kycRoutes)
 
 app.listen(PORT, ()=>{
     console.log(`Server is running on port ${PORT}`);

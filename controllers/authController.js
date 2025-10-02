@@ -14,7 +14,7 @@ const registerUser = async (req, res) => {
             return res.status(400).json({message: 'User already exists'});
         }
         // Hash Password
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await bcrypt.hash(password, 12);
         // Email Verification Code Generation
         const verification = jwt.sign( {email}, process.env.EMAIL_VERIFICATION_SECRET,{ expiresIn: '1h' });
         const html = generateNewUserMail(verification, firstName);
@@ -216,7 +216,7 @@ const resetPassword = async (req, res) => {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     // Prevent reusing old password
     const isSamePassword = await bcrypt.compare(password, foundUser.password);

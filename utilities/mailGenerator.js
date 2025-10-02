@@ -32,7 +32,7 @@ const generateNewUserMail = (verificationCode, firstName) => {
                     <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto;">
                         <tr>
                             <td style="background-color: #2F67FA; border-radius: 5px;">
-                                <a href="${process.env.URL}/api/verify/${verificationCode}" 
+                                <a href="${process.env.URL}/verify/${verificationCode}" 
                                     style="display: inline-block; padding: 12px 30px; color: #ffffff; 
                                           text-decoration: none; font-weight: bold; font-size: 16px;">
                                     Verify Your Email
