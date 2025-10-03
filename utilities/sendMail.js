@@ -1,69 +1,63 @@
 // // utilities/sendMail.js
-// const SibApiV3Sdk = require("sib-api-v3-sdk");
+// const nodemailer = require("nodemailer");
+
+// const transporter = nodemailer.createTransport({
+//   host: "smtp-relay.brevo.com",
+//   port: 587,
+//   secure: false, // use true if port is 465
+//   auth: {
+//     user: "986536001@smtp-brevo.com", // your Brevo SMTP login
+//     pass: "9bxVNFOZPwUpajzs", // your Brevo SMTP password
+//   },
+// });
 
 // const sendMail = async (to, subject, html) => {
 //   try {
-//     // Initialize client
-//     const defaultClient = SibApiV3Sdk.ApiClient.instance;
-//     const apiKey = defaultClient.authentications["api-key"];
-//     apiKey.apiKey = process.env.BREVO_API_KEY; // put in Render env
-
-//     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-
-//     // Sender must be from a verified domain in Brevo
-//     const sender = {
-//       email: process.env.EMAIL_ADDRESS, 
-//       name: "Finstack"
-//     };
-
-//     const receivers = [{ email: to }];
-
-//     await tranEmailApi.sendTransacEmail({
-//       sender,
-//       to: receivers,
+//     const info = await transporter.sendMail({
+//       from: '"FinStack" <hello@usefinstack.co>', // must be verified domain/email
+//       to,
 //       subject,
-//       htmlContent: html
+//       html,
 //     });
 
-//     console.log(`✅ Email sent to ${to}`);
+//     console.log("✅ Email sent:", info.messageId);
 //   } catch (error) {
-//     console.error("❌ Error sending email:", error.response?.body || error.message);
-//     throw error;
+//     console.error("❌ Error sending email:", error);
 //   }
 // };
 
 // module.exports = sendMail;
+// utilities/sendMail.js
 const SibApiV3Sdk = require("sib-api-v3-sdk");
 
 const sendMail = async (to, subject, htmlContent) => {
   try {
-    // 🔎 Debug env vars
-    console.log("BREVO_API_KEY present?", !!process.env.BREVO_API_KEY);
-    console.log("BREVO_FROM_EMAIL:", process.env.BREVO_FROM_EMAIL);
-
-    let defaultClient = SibApiV3Sdk.ApiClient.instance;
-    let apiKey = defaultClient.authentications["api-key"];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
+    // Initialize Brevo client
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications["api-key"];
+    apiKey.apiKey = process.env.BREVO_API_KEY; // Set in Render env
 
     const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
     const sender = {
-      email: process.env.BREVO_FROM_EMAIL,
+      email: process.env.BREVO_FROM_EMAIL, // must be from your verified Brevo domain
       name: "FinStack",
     };
 
     const receivers = [{ email: to }];
 
-    await tranEmailApi.sendTransacEmail({
+    // Send the email
+    const response = await tranEmailApi.sendTransacEmail({
       sender,
       to: receivers,
       subject,
       htmlContent,
     });
 
-    console.log("✅ Email sent successfully!");
+    console.log("✅ Email sent successfully:", response.messageId);
   } catch (error) {
-    console.error("❌ Error sending email:", error);
+    console.error("❌ Error sending email:", error.response?.body || error.message);
+    throw error;
   }
 };
 
