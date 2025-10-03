@@ -7,7 +7,7 @@ const sendMail = require('../utilities/sendMail');
 // Register New User
 const registerUser = async (req, res) => {
     try {
-        const {firstName, lastName, email, password, howYouHeardAboutUs, phoneNumber} = req.body;
+        const {firstName, lastName, email, password, howYouHeardAboutUs} = req.body;
         // Check if user already exists
         const existingUser = await User.findOne({ email });
         if(existingUser){
@@ -19,7 +19,7 @@ const registerUser = async (req, res) => {
         const verification = jwt.sign( {email}, process.env.EMAIL_VERIFICATION_SECRET,{ expiresIn: '1h' });
         const html = generateNewUserMail(verification, firstName);
         // Create User
-        const newUser = await User.create({firstName,lastName, email, password: hashedPassword, howYouHeardAboutUs,verificationCode: verification, phoneNumber});
+        const newUser = await User.create({firstName,lastName, email, password: hashedPassword, howYouHeardAboutUs,verificationCode: verification});
         // Send Verification Email        
         await sendMail(email, "Welcome to Finstack", html);
         return res.status(201).json({ message: 'User registered successfully', });
@@ -121,13 +121,13 @@ const loginUser = async (req, res) => {
     // Generate access 
     const accessToken = jwt.sign(
       { id: foundUser._id, email: foundUser.email },
-      process.env.ACCESS_TOKEN,
+      process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "1h" }
     );
 // Generate refresh token
     const newRefreshToken = jwt.sign(
       { id: foundUser._id, email: foundUser.email },
-      process.env.REFRESH_TOKEN,
+      process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: "7d" }
     );
     // Store refresh token in DB
@@ -246,3 +246,184 @@ const resetPassword = async (req, res) => {
 
 
 module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, forgotPassword, resetPassword};
+
+
+// const bcrypt = require("bcrypt");
+// const jwt = require("jsonwebtoken");
+// const User = require("../models/userModel");
+// const { generateOTP } = require("../utilities/otpGenerator");
+// const { sendVerificationEmail } = require("../utilities/sendVerificationEmail");
+
+
+// // 📌 REGISTER with OTP
+// const registerUser = async (req, res) => {
+//   try {
+//     const { firstName, lastName, email, password, phoneNumber } = req.body;
+
+//     const existingUser = await User.findOne({ email });
+//     if (existingUser && existingUser.isVerified) {
+//       return res.status(400).json({ message: "User already registered, proceed to login" });
+//     }
+
+//     const hashedPassword = await bcrypt.hash(password, 10);
+//     const otp = generateOTP();
+
+//     const user = await User.findOneAndUpdate(
+//       { email },
+//       {
+//         firstName,
+//         lastName,
+//         email,
+//         password: hashedPassword,
+//         phoneNumber,
+//         otp,
+//         otpExpires: Date.now() + parseInt(process.env.OTP_EXPIRES_IN) // 10 mins
+//       },
+//       { new: true, upsert: true }
+//     );
+
+//     await sendVerificationEmail(user.email, otp, user.firstName);
+
+//     return res.status(201).json({ message: "OTP sent to your email. Verify to continue." });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// // 📌 VERIFY OTP for account activation
+// const verifyAccount = async (req, res) => {
+//   try {
+//     const { email, otp } = req.body;
+
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+//     if (user.isVerified) return res.status(400).json({ message: "Account already verified" });
+
+//     // if (user.otp !== otp || user.otpExpires < Date.now()) {
+//     //   return res.status(400).json({ message: "Invalid or expired OTP" });
+//     // }
+//     if (!user.otp || !user.otpExpires || user.otp !== otp || user.otpExpires < Date.now()) {
+//   return res.status(400).json({ message: "Invalid or expired OTP" });
+// }
+
+
+//     user.isVerified = true;
+//     user.otp = null;
+//     user.otpExpires = null;
+//     await user.save();
+
+//     const token = jwt.sign({ id: user._id, email: user.email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h" });
+
+//     return res.status(200).json({ message: "Account verified successfully", token, user });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// // 📌 RESEND OTP
+// const resendOtp = async (req, res) => {
+//   try {
+//     const { email } = req.body;
+
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+//     if (user.isVerified) return res.status(400).json({ message: "Account already verified" });
+
+//     const otp = generateOTP();
+//     user.otp = otp;
+//     user.otpExpires = Date.now() + parseInt(process.env.OTP_EXPIRES_IN);
+//     await user.save();
+
+//     await sendVerificationEmail(user.email, otp, user.firstName);
+
+//     return res.status(200).json({ message: "New OTP sent to your email" });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// // 📌 LOGIN (only if verified)
+// const loginUser = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+
+//     if (!user.isVerified) {
+//       return res.status(400).json({ message: "Please verify your account with OTP before logging in" });
+//     }
+
+//     const isPasswordValid = await bcrypt.compare(password, user.password);
+//     if (!isPasswordValid) return res.status(400).json({ message: "Invalid credentials" });
+
+//     const token = jwt.sign({ id: user._id, email: user.email }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: "1h" });
+
+//     // return res.status(200).json({ message: "Login successful", token, user });
+//     const { password: _, ...userData } = user.toObject();
+// return res.status(200).json({ message: "Login successful", token, user: userData });
+
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// // 📌 FORGOT PASSWORD (send OTP)
+// const forgotPassword = async (req, res) => {
+//   try {
+//     const { email } = req.body;
+
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+
+//     const otp = generateOTP();
+//     user.otp = otp;
+//     user.otpExpires = Date.now() + parseInt(process.env.OTP_EXPIRES_IN);
+//     await user.save();
+
+//     await sendVerificationEmail(user.email, otp, user.firstName);
+
+//     return res.status(200).json({ message: "Password reset OTP sent to your email" });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// // 📌 RESET PASSWORD (verify OTP, then update)
+// const resetPassword = async (req, res) => {
+//   try {
+//     const { email, otp, newPassword } = req.body;
+
+//     const user = await User.findOne({ email });
+//     if (!user) return res.status(404).json({ message: "User not found" });
+
+//     if (user.otp !== otp || user.otpExpires < Date.now()) {
+//       return res.status(400).json({ message: "Invalid or expired OTP" });
+//     }
+
+//     const hashedPassword = await bcrypt.hash(newPassword, 10);
+//     user.password = hashedPassword;
+//     user.otp = null;
+//     user.otpExpires = null;
+//     await user.save();
+
+//     return res.status(200).json({ message: "Password reset successful" });
+//   } catch (error) {
+//     return res.status(500).json({ message: "Server error", error: error.message });
+//   }
+// };
+
+
+// module.exports = {
+//   registerUser,
+//   verifyAccount,
+//   resendOtp,
+//   loginUser,
+//   forgotPassword,
+//   resetPassword,
+// };

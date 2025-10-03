@@ -1,5 +1,5 @@
 const validateNewUser = async(req, res, next)=>{
-    const { firstName, lastName, email, password, country, phoneNumber } = req.body
+    const { firstName, lastName, email, password } = req.body
 
     const errors = []
 
@@ -17,11 +17,11 @@ const validateNewUser = async(req, res, next)=>{
     errors.push("Password must contain uppercase, lowercase, number, and special character");
     }
 
-    if(!phoneNumber) {errors.push("Phone number is required")
+  //   if(!phoneNumber) {errors.push("Phone number is required")
 
-    }else if (!/^\d{7,15}$/.test(phoneNumber)) {
-    errors.push("Invalid phone number format");
-  }
+  //   }else if (!/^\d{7,15}$/.test(phoneNumber)) {
+  //   errors.push("Invalid phone number format");
+  // }
 
     if(errors.length > 0){
         return res.status(400).json({message: errors})

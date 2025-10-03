@@ -29,12 +29,12 @@ app.get("/test-email", async (req, res) => {
     await sendMail(
       process.env.EMAIL_ADDRESS, // send to yourself for test
       "Render Test Email",
-      "<h1>Hello from Render backend 🎉</h1>"
+      "<h1>Hello from Render backend</h1>"
     );
-    res.send("✅ Email sent successfully, check your inbox!");
+    res.send("Email sent successfully, check your inbox!");
   } catch (error) {
     console.error("Error sending test email:", error);
-    res.status(500).send("❌ Email failed: " + error.message);
+    res.status(500).send("Email failed: " + error.message);
   }
 });
 
