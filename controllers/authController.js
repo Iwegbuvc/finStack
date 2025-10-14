@@ -5,37 +5,89 @@ const { generateNewUserMail, generateVerificationSuccessMail, generateVerificati
 const sendMail = require('../utilities/sendMail');
 
 // Register New User
-const registerUser = async (req, res) => {
-    try {
-        const {firstName, lastName, email, password, howYouHeardAboutUs} = req.body;
-        // Check if user already exists
-        const existingUser = await User.findOne({ email });
-        if(existingUser){
-            return res.status(400).json({message: 'User already exists'});
-        }
-        // Hash Password
-        const hashedPassword = await bcrypt.hash(password, 10);
-        // Email Verification Code Generation
-        const verification = jwt.sign( {email}, process.env.EMAIL_VERIFICATION_SECRET,{ expiresIn: '1h' });
-        const html = generateNewUserMail(verification, firstName);
-        // Create User
-        const newUser = await User.create({firstName,lastName, email, password: hashedPassword, howYouHeardAboutUs,verificationCode: verification});
-        // Send Verification Email        
-        await sendMail(email, "Welcome to Finstack", html);
-        return res.status(201).json({ message: 'User registered successfully', });
+// const registerUser = async (req, res) => {
+//     try {
+//         const {firstName, lastName, email, password, howYouHeardAboutUs} = req.body;
+//         // Check if user already exists
+//         const existingUser = await User.findOne({ email });
+//         if(existingUser){
+//             return res.status(400).json({message: 'User already exists'});
+//         }
+//         // Hash Password
+//         const hashedPassword = await bcrypt.hash(password, 12);
+//         // Email Verification Code Generation
+//         const verification = jwt.sign( {email}, process.env.EMAIL_VERIFICATION_SECRET,{ expiresIn: '1h' });
+//         const html = generateNewUserMail(verification, firstName);
+//         // Create User
+//         const newUser = await User.create({firstName,lastName, email, password: hashedPassword, howYouHeardAboutUs,verificationCode: verification});
+//         // Send Verification Email        
+//         await sendMail(email, "Welcome to Finstack", html);
+//         return res.status(201).json({ message: 'User registered successfully', });
 
-    } catch (error) {
-         //Enhanced Duplicate Key Error Handling
-        if (error.code === 11000) {
-            // Get which field caused the duplicate
-            const duplicateField = Object.keys(error.keyValue)[0];
-            return res.status(400).json({ 
-                message: `${duplicateField} already exists` 
-            });
-        }
-        res.status(500).json({message: 'Server Error', error: error.message});
+//     } catch (error) {
+//          //Enhanced Duplicate Key Error Handling
+//         if (error.code === 11000) {
+//             // Get which field caused the duplicate
+//             const duplicateField = Object.keys(error.keyValue)[0];
+//             return res.status(400).json({ 
+//                 message: `${duplicateField} already exists` 
+//             });
+//         }
+//         res.status(500).json({message: 'Server Error', error: error.message});
+//     }
+// }
+const registerUser = async (req, res) => {
+  try {
+    console.log("🧾 Request body:", req.body);
+    const {
+      firstName,
+      lastName,
+      email,
+      password,
+      howYouHeardAboutUs,
+      role // include role
+    } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: "User already exists" });
     }
-}
+
+    // Hash Password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
+    // Email Verification Code Generation
+    const verification = jwt.sign(
+      { email },
+      process.env.EMAIL_VERIFICATION_SECRET,
+      { expiresIn: "1h" }
+    );
+
+    const html = generateNewUserMail(verification, firstName);
+
+    // ✅ Allow merchant role if explicitly sent
+    const newUser = await User.create({
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      howYouHeardAboutUs,
+      verificationCode: verification,
+      role: role || "user" // <-- if no role, default to user
+    });
+
+    await sendMail(email, "Welcome to Finstack", html);
+    return res.status(201).json({ message: "User registered successfully" });
+  } catch (error) {
+    if (error.code === 11000) {
+      const duplicateField = Object.keys(error.keyValue)[0];
+      return res.status(400).json({ message: `${duplicateField} already exists` });
+    }
+    res.status(500).json({ message: "Server Error", error: error.message });
+  }
+};
+
 // Verify Email
 const verifyEmail = async (req, res) => {
   const { verificationCode } = req.params;
@@ -190,7 +242,6 @@ const forgotPassword = async (req, res) => {
   }
 };
 
-
 // Reset Password
 const resetPassword = async (req, res) => {
   const { resetToken, password } = req.body;
@@ -216,7 +267,7 @@ const resetPassword = async (req, res) => {
     }
 
     // Hash new password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     // Prevent reusing old password
     const isSamePassword = await bcrypt.compare(password, foundUser.password);
@@ -243,5 +294,66 @@ const resetPassword = async (req, res) => {
   }
 };
 
+// Get all users (for admin)
+const getAllUsers = async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
 
-module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, forgotPassword, resetPassword};
+    const users = await User.find()
+      .select("name email phone role createdAt")
+      .skip(skip)
+      .limit(limit);
+
+    const totalUsers = await User.countDocuments();
+
+    res.status(200).json({
+      success: true,
+      message: "Users fetched successfully",
+      page,
+      totalPages: Math.ceil(totalUsers / limit),
+      totalUsers,
+      users,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching users:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error",
+    });
+  }
+};
+
+// Update User Role (for admin) 
+const updateUserRole = async (req, res) => {
+  try {
+    const { userId, role } = req.body;
+
+    // Validate input
+    if (!userId || !role) {
+      return res.status(400).json({ message: "User ID and role are required" });
+    }
+
+    
+    if (!["user", "merchant", "admin"].includes(role)) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    // Find user and update role
+    const updatedUser = await User.findByIdAndUpdate(userId, { role }, { new: true });
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.status(200).json({
+      message: "User role updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+     res.status(500).json({ message: error.message });
+  }
+}
+
+
+module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, forgotPassword, resetPassword, getAllUsers, updateUserRole};
