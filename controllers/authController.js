@@ -5,40 +5,8 @@ const { generateNewUserMail, generateVerificationSuccessMail, generateVerificati
 const sendMail = require('../utilities/sendMail');
 
 // Register New User
-// const registerUser = async (req, res) => {
-//     try {
-//         const {firstName, lastName, email, password, howYouHeardAboutUs} = req.body;
-//         // Check if user already exists
-//         const existingUser = await User.findOne({ email });
-//         if(existingUser){
-//             return res.status(400).json({message: 'User already exists'});
-//         }
-//         // Hash Password
-//         const hashedPassword = await bcrypt.hash(password, 12);
-//         // Email Verification Code Generation
-//         const verification = jwt.sign( {email}, process.env.EMAIL_VERIFICATION_SECRET,{ expiresIn: '1h' });
-//         const html = generateNewUserMail(verification, firstName);
-//         // Create User
-//         const newUser = await User.create({firstName,lastName, email, password: hashedPassword, howYouHeardAboutUs,verificationCode: verification});
-//         // Send Verification Email        
-//         await sendMail(email, "Welcome to Finstack", html);
-//         return res.status(201).json({ message: 'User registered successfully', });
-
-//     } catch (error) {
-//          //Enhanced Duplicate Key Error Handling
-//         if (error.code === 11000) {
-//             // Get which field caused the duplicate
-//             const duplicateField = Object.keys(error.keyValue)[0];
-//             return res.status(400).json({ 
-//                 message: `${duplicateField} already exists` 
-//             });
-//         }
-//         res.status(500).json({message: 'Server Error', error: error.message});
-//     }
-// }
 const registerUser = async (req, res) => {
   try {
-    console.log("🧾 Request body:", req.body);
     const {
       firstName,
       lastName,
@@ -148,7 +116,7 @@ const resendVerificationCode = async (req, res) => {
     return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
-// User Login
+// USER LOGIN HANDLER
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -188,7 +156,7 @@ const loginUser = async (req, res) => {
     // Send refresh token in cookie (secure in production)
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
-      secure: false, // change to true if using https
+      secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging',
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
@@ -205,6 +173,97 @@ const loginUser = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
+
+// Refresh Token Handler with Rotation
+const handleRefreshToken = async (req, res) => {
+    // 1. Check for Refresh Token in Cookies
+    const cookies = req.cookies;
+    if (!cookies?.refreshToken) {
+        return res.status(401).json({ message: 'Unauthorized: Refresh Token Missing' });
+    }
+    const refreshToken = cookies.refreshToken; // This is the OLD/INCOMING refresh token
+
+    // Optional: Clear the cookie now if you are using Refresh Token Rotation (best practice)
+    // You can clear it here, but sending the new one will overwrite it anyway.
+    // res.clearCookie('refreshToken', { httpOnly: true, sameSite: 'strict', secure: true }); 
+
+    // 2. Find the User with the Refresh Token in the Database
+    try {
+        // Find a user who has this specific token in their 'refreshToken' array
+        const foundUser = await User.findOne({ refreshToken: refreshToken }).exec();
+
+        // Check 2a: Was the token found in the database?
+        if (!foundUser) {
+            // This is the critical security check for a token used after logout/theft.
+            return res.status(403).json({ message: 'Forbidden: Invalid Refresh Token' }); 
+        }
+
+        // 3. Verify the JWT Signature and Expiration
+        jwt.verify(
+            refreshToken,
+            process.env.REFRESH_TOKEN_SECRET,
+            async (err, decoded) => { // 👈 IMPORTANT: Changed the callback to 'async' 
+                
+                // Check 3a/3b: Signature failed or token ID doesn't match the user found in DB?
+                if (err || foundUser._id.toString() !== decoded.id) {// Clear ALL refresh tokens for this user because this one was replayed or tampered with
+                    console.error(`SECURITY ALERT: Token verification failed for user ID ${foundUser._id}. Wiping all tokens.`);
+                    foundUser.refreshToken = [];
+                    await foundUser.save();
+                    
+                    return res.status(403).json({ message: 'Forbidden: Token Verification Failed' });
+                }
+
+                // ----------------------------------------------------
+                // 🚀 START OF YOUR NEW ROTATION LOGIC 🚀
+                // ----------------------------------------------------
+                
+                // 4a. Generate a NEW Refresh Token
+                const newRefreshToken = jwt.sign(
+                    { id: foundUser._id, email: foundUser.email },
+                    process.env.REFRESH_TOKEN_SECRET,
+                    { expiresIn: "7d" } // New 7-day token
+                );
+
+                // 4b. Find and remove the OLD refresh token from the database array
+                foundUser.refreshToken = foundUser.refreshToken.filter(
+                    (token) => token !== refreshToken
+                );
+                
+                // 4c. Add the NEW refresh token to the database array and save
+                foundUser.refreshToken.push(newRefreshToken);
+                await foundUser.save(); // 👈 This MUST be awaited!
+
+                // 4d. Generate the new Access Token (short life)
+                const newAccessToken = jwt.sign(
+                    { id: foundUser._id, email: foundUser.email },
+                    process.env.ACCESS_TOKEN_SECRET,
+                    { expiresIn: '1h' }
+                );
+
+                // 5. Send the NEW Refresh Token in a cookie (and the new Access Token)
+                res.cookie("refreshToken", newRefreshToken, {
+                    httpOnly: true,
+                    // Use ternary for production readiness (needs HTTPS in production)
+                    secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging',
+                    sameSite: "strict",
+                    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+                });
+
+                res.status(200).json({ accessToken: newAccessToken });
+                
+                // ----------------------------------------------------
+                // 🛑 END OF YOUR NEW ROTATION LOGIC 🛑
+                // ----------------------------------------------------
+            }
+        );
+
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+    }
+};
+
+
 // forgot password
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -355,5 +414,55 @@ const updateUserRole = async (req, res) => {
   }
 }
 
+// Logout User
+const logoutUser = async (req, res) => {
+    // 1. Check for Refresh Token in Cookies
+    const cookies = req.cookies;
+    if (!cookies?.refreshToken) {
+        // Clear cookie just in case (e.g., if token was removed from DB but cookie remained)
+        res.clearCookie('refreshToken', { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
+            sameSite: 'strict' 
+        });
+        return res.status(204).json({ message: 'No Content (Already logged out)' }); // 204 No Content is standard for successful logout
+    }
 
-module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, forgotPassword, resetPassword, getAllUsers, updateUserRole};
+    const refreshToken = cookies.refreshToken;
+
+    try {
+        // 2. Find user who has this token and remove it from DB
+        const foundUser = await User.findOne({ refreshToken: refreshToken });
+
+        if (foundUser) {
+            // Remove the token from the user's array
+            foundUser.refreshToken = foundUser.refreshToken.filter(
+                (token) => token !== refreshToken
+            );
+            await foundUser.save();
+        }
+        
+        // 3. Clear the cookie on the client side
+        res.clearCookie('refreshToken', { 
+            httpOnly: true, 
+            // IMPORTANT: Use the same settings (secure, sameSite) used when the cookie was set
+            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
+            sameSite: 'strict' 
+        });
+
+        // Send successful response
+        return res.status(204).send(); // Send 204 No Content for success
+        
+    } catch (error) {
+        console.error('Logout Error:', error);
+        // Even if DB fails, clear the cookie and inform the user
+        res.clearCookie('refreshToken', { 
+            httpOnly: true, 
+            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
+            sameSite: 'strict' 
+        });
+        return res.status(204).send();
+    }
+};
+
+module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, handleRefreshToken, forgotPassword, resetPassword, getAllUsers, updateUserRole, logoutUser};

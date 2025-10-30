@@ -11,7 +11,8 @@ phoneNumber:{type: String, default: null},
 refreshToken:{type: [String], default: []},
 verificationCode:{type: String},
 resetPasswordToken:{type: String},
-isVerified:{type: Boolean, default: false}
+isVerified:{type: Boolean, default: false},
+kycVerified: { type: Boolean, default: false },
 
 }, {timestamps: true});
 

@@ -1,0 +1,94 @@
+{"level":"error","message":"❌ Error getting wallet balance: Cannot read properties of undefined (reading '_id')","timestamp":"2025-10-10 14:20:59"}
+{"level":"error","message":"Error creating wallet:","timestamp":"2025-10-10 14:33:22"}
+{"level":"error","message":"Error creating wallet:","timestamp":"2025-10-10 14:34:17"}
+{"level":"error","message":"Error creating wallet:","timestamp":"2025-10-10 14:40:19"}
+{"level":"error","message":"Error creating wallet:","timestamp":"2025-10-10 15:10:44"}
+{"level":"error","message":"❌ Failed to fetch wallet: Cannot destructure property 'accountNumber' of 'req.body' as it is undefined.","stack":"TypeError: Cannot destructure property 'accountNumber' of 'req.body' as it is undefined.\n    at getWallet (C:\\Users\\user\\Desktop\\Victor\\Software\\Backend\\Projects\\FinStack__Folder\\finStack\\controllers\\walletController.js:79:13)\n    at Layer.handleRequest (C:\\Users\\user\\Desktop\\Victor\\Software\\Backend\\Projects\\FinStack__Folder\\finStack\\node_modules\\router\\lib\\layer.js:152:17)\n    at next (C:\\Users\\user\\Desktop\\Victor\\Software\\Backend\\Projects\\FinStack__Folder\\finStack\\node_modules\\router\\lib\\route.js:157:13)\n    at verifyToken (C:\\Users\\user\\Desktop\\Victor\\Software\\Backend\\Projects\\FinStack__Folder\\finStack\\middlewares\\validateToken.js:33:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","timestamp":"2025-10-10 15:25:34"}
+{"level":"error","message":"❌ Failed to fetch wallet: axios is not defined","stack":"ReferenceError: axios is not defined\n    at getWallet (C:\\Users\\user\\Desktop\\Victor\\Software\\Backend\\Projects\\FinStack__Folder\\finStack\\controllers\\walletController.js:93:22)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)","timestamp":"2025-10-10 15:46:54"}
+{"level":"info","message":"💡 Mock deposit ₦[object Object] to account [object Object]","timestamp":"2025-10-12 02:04:06"}
+{"level":"info","message":"💡 Mock deposit ₦[object Object] to account [object Object]","timestamp":"2025-10-12 02:12:23"}
+{"level":"info","message":"💡 Mock deposit ₦[object Object] to account [object Object]","timestamp":"2025-10-12 02:17:13"}
+{"level":"info","message":"💡 Mock deposit ₦[object Object] to account [object Object]","timestamp":"2025-10-12 02:55:25"}
+{"level":"info","message":"💡 Mock deposit ₦20000 to account 1234567890","timestamp":"2025-10-12 03:13:20"}
+{"level":"error","message":"❌ Deposit error: Transaction validation failed: walletId: Cast to ObjectId failed for value \"1234567890\" (type string) at path \"walletId\" because of \"BSONError\", currency: Path `currency` is required., status: `SUCCESS` is not a valid enum value for path `status`.","timestamp":"2025-10-12 03:13:20"}
+{"level":"info","message":"💡 Mock deposit ₦20000 to account 1234567890","timestamp":"2025-10-12 03:18:07"}
+{"level":"info","message":"✅ Deposit successful: ₦20000 → 1234567890","timestamp":"2025-10-12 03:18:07"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:22:36"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:22:36"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:22:58"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:22:58"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:26:27"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:26:27"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:27:17"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:27:17"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:28:05"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:28:05"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:30:46"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:30:46"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:31:30"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:31:30"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:33:38"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:33:38"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:34:17"}
+{"level":"error","message":"❌ Withdrawal error: Account number, destination, and amount are required","timestamp":"2025-10-12 03:34:17"}
+{"level":"info","message":"💡 Mock withdrawal ₦20000 from 1234567890 → 0987654321","timestamp":"2025-10-12 03:38:19"}
+{"level":"info","message":"💡 Mock withdrawal ₦20000 from 1234567890 → 0987654321","timestamp":"2025-10-12 03:42:18"}
+{"level":"error","message":"❌ Withdrawal Service Error: Cannot access 'data' before initialization","timestamp":"2025-10-12 03:42:18"}
+{"level":"error","message":"❌ Withdrawal error: Cannot access 'data' before initialization","timestamp":"2025-10-12 03:42:18"}
+{"level":"info","message":"💡 Mock withdrawal ₦20000 from 1234567890 → 0987654321","timestamp":"2025-10-12 03:45:31"}
+{"level":"info","message":"💡 Mock withdrawal ₦20000 from 1234567890 → 0987654321","timestamp":"2025-10-12 03:51:06"}
+{"level":"info","message":"💡 Mock withdrawal ₦20000 from 1234567890 → 0987654321","timestamp":"2025-10-12 04:00:29"}
+{"level":"error","message":"❌ Wallet creation error: getaddrinfo ENOTFOUND sandbox.blockradar.co","timestamp":"2025-10-18 12:49:22"}
+{"level":"error","message":"❌ Wallet creation error: Invalid URL","timestamp":"2025-10-18 12:53:25"}
+{"level":"error","message":"❌ Wallet creation error: currency is not defined","timestamp":"2025-10-18 13:01:55"}
+{"level":"error","message":"❌ Wallet creation error: currency is not defined","timestamp":"2025-10-18 13:02:14"}
+{"level":"error","message":"❌ Wallet creation error: E11000 duplicate key error collection: test.wallets index: user_id_1 dup key: { user_id: ObjectId('68dfb80f57ce36ee02e81e4a') }","timestamp":"2025-10-18 14:53:22"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 16:31:53"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:01:08"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:35:54"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:45:10"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:55:57"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:56:20"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:57:13"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 17:57:53"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 18:00:45"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 18:07:57"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 18:08:41"}
+{"level":"error","message":"❌ Deposit error: Request failed with status code 404","timestamp":"2025-10-18 18:12:02"}
+{"level":"info","message":"💰 TEST FUNDS added: 100000 USD to wallet 68f382b1f9af3a0a25900fab for user 68f37c153c74b127472f2f22","timestamp":"2025-10-19 12:07:47"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 12:08:49"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 12:15:28"}
+{"level":"error","message":"❌ Withdrawal completion error: withdrawFundsService is not a function","timestamp":"2025-10-19 12:16:33"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 12:19:02"}
+{"level":"error","message":"❌ Withdrawal completion error: withdrawFundsService is not a function","timestamp":"2025-10-19 12:19:44"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 12:25:06"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-19 12:25:53"}
+{"level":"error","message":"❌ Withdrawal completion error: Account number, destination, and amount are required","timestamp":"2025-10-19 12:25:53"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 12:27:53"}
+{"level":"error","message":"❌ Withdrawal Service Error: Account number, destination, and amount are required","timestamp":"2025-10-19 12:29:06"}
+{"level":"error","message":"❌ Withdrawal completion error: Account number, destination, and amount are required","timestamp":"2025-10-19 12:29:06"}
+{"level":"error","message":"❌ Wallet creation error: Blockradar response missing wallet ID or address for source account.","timestamp":"2025-10-19 15:28:07"}
+{"level":"error","message":"❌ Wallet creation error: Blockradar response missing wallet ID or address for source account.","timestamp":"2025-10-19 15:29:55"}
+{"level":"error","message":"❌ Wallet creation error: Blockradar response missing wallet ID or address for source account.","timestamp":"2025-10-19 15:32:26"}
+{"level":"info","message":"💰 TEST FUNDS added: 100000 USD to wallet 68f382b1f9af3a0a25900fab for user 68f37c153c74b127472f2f22","timestamp":"2025-10-19 15:46:38"}
+{"level":"info","message":"🔍 Attempting to fund account 0xd515575064B8C43E0E11a74ADeF80280D175aacc using User ID: 68dfa3f11347d02b913ebd72. (Auth ID: 68f37c153c74b127472f2f22)","timestamp":"2025-10-19 16:11:29"}
+{"level":"info","message":"💰 TEST FUNDS added: 100000 USD to wallet 68f4fd910331ddbd36a99cf7 for user 68dfa3f11347d02b913ebd72","timestamp":"2025-10-19 16:11:30"}
+{"level":"info","message":"Attempting withdrawal initiation for authenticated user ID: 68f37c153c74b127472f2f22","timestamp":"2025-10-19 16:22:49"}
+{"level":"info","message":"🔍 Attempting to fund account 0x5559F943F6358baa682c5fBE40CD8b9A05262b75 using User ID: 68f37c153c74b127472f2f22. (Auth ID: 68f37c153c74b127472f2f22)","timestamp":"2025-10-19 16:35:57"}
+{"level":"info","message":"💰 TEST FUNDS added: 200000 USD to wallet 68f5047765546ef36a14a44b for user 68f37c153c74b127472f2f22","timestamp":"2025-10-19 16:35:57"}
+{"level":"info","message":"Attempting withdrawal initiation for authenticated user ID: 68f37c153c74b127472f2f22","timestamp":"2025-10-19 16:37:08"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 16:37:10"}
+{"level":"info","message":"💡 Mock withdrawal ₦5000 from 0x5559F943F6358baa682c5fBE40CD8b9A05262b75 → 0x5559F943F6358baa682c5fBE40CD8b9A05262b75","timestamp":"2025-10-19 16:39:11"}
+{"level":"error","message":"❌ Withdrawal completion error: logTransaction is not defined","timestamp":"2025-10-19 16:39:11"}
+{"level":"info","message":"Attempting withdrawal initiation for authenticated user ID: 68f37c153c74b127472f2f22","timestamp":"2025-10-19 16:46:59"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvc@gmail.com for action: WITHDRAWAL","timestamp":"2025-10-19 16:47:01"}
+{"level":"info","message":"💡 Mock withdrawal ₦5000 from 0x5559F943F6358baa682c5fBE40CD8b9A05262b75 → 0x5559F943F6358baa682c5fBE40CD8b9A05262b75","timestamp":"2025-10-19 16:47:55"}
+{"level":"info","message":"📦 Incoming Blockradar webhook: withdraw.success","timestamp":"2025-10-22 18:13:38"}
+{"level":"info","message":"💸 Processing successful withdrawal ref: hoping to see it on my DB test withdrawal","timestamp":"2025-10-22 18:13:38"}
+{"level":"warn","message":"⚠️ Withdrawal: No wallet found for Blockradar wallet ID de9ad428-df5f-4c06-8427-0af7d467728d","timestamp":"2025-10-22 18:13:38"}
+{"level":"info","message":"📦 Incoming Blockradar webhook: withdraw.success","timestamp":"2025-10-22 18:19:07"}
+{"level":"info","message":"💸 Processing successful withdrawal ref: hoping to see it on my DB please test withdrawal","timestamp":"2025-10-22 18:19:07"}
+{"level":"warn","message":"⚠️ Withdrawal: No wallet found for Blockradar wallet ID de9ad428-df5f-4c06-8427-0af7d467728d","timestamp":"2025-10-22 18:19:07"}
+{"level":"info","message":"📦 Incoming Blockradar webhook: withdraw.success","timestamp":"2025-10-22 18:52:16"}
+{"level":"info","message":"💸 Processing successful withdrawal ref: DB please test withdrawal","timestamp":"2025-10-22 18:52:16"}
+{"level":"warn","message":"⚠️ Withdrawal: No wallet found for Blockradar wallet ID de9ad428-df5f-4c06-8427-0af7d467728d","timestamp":"2025-10-22 18:52:16"}
