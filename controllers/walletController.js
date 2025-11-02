@@ -1036,7 +1036,7 @@ const createWallet = async (req, res) => {
                 // This catches the "KYC record not found or is not APPROVED." error
                 return res.status(403).json({ 
                     success: false, 
-                    message: `NGN wallet creation requires approved KYC data: ${kycError.message}` 
+                    message: `NGN account creation requires approved KYC data: ${kycError.message}` 
                 });
             }
         
