@@ -92,3 +92,66 @@
 {"level":"info","message":"📦 Incoming Blockradar webhook: withdraw.success","timestamp":"2025-10-22 18:52:16"}
 {"level":"info","message":"💸 Processing successful withdrawal ref: DB please test withdrawal","timestamp":"2025-10-22 18:52:16"}
 {"level":"warn","message":"⚠️ Withdrawal: No wallet found for Blockradar wallet ID de9ad428-df5f-4c06-8427-0af7d467728d","timestamp":"2025-10-22 18:52:16"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 13:43:46"}
+{"level":"error","message":"❌ Deposit error: Operation `wallets.findOne()` buffering timed out after 10000ms","timestamp":"2025-11-03 14:06:45"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:10:18"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:16:42"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:17:18"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:26:08"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:29:30"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:40:09"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:40:37"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:55:20"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 14:59:18"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 15:05:02"}
+{"level":"error","message":"❌ Deposit error: WAAS9577771291298 is not defined","timestamp":"2025-11-03 15:09:56"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 15:14:24"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 16:19:17"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 16:22:46"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 16:24:15"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 16:34:22"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 16:34:39"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 19:05:51"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-03 19:07:12"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:05:36"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:28:34"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:36:54"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:39:24"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:42:38"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:49:33"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:49:51"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 03:54:41"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-07 09:47:15"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-08 02:10:20"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-08 02:34:45"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: Request failed with status code 500","timestamp":"2025-11-08 02:44:37"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Service failed: Request failed with status code 404. Proceeding with deposit.","timestamp":"2025-11-08 03:45:01"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Service failed: Request failed with status code 404. Proceeding with deposit.","timestamp":"2025-11-08 04:10:40"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Balance Enquiry successful, but balance data is missing in response.. Proceeding with deposit.","timestamp":"2025-11-08 04:38:20"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Balance Enquiry successful, but balance data is missing in response.. Proceeding with deposit.","timestamp":"2025-11-08 09:53:45"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Balance Enquiry successful, but balance data is missing in response.. Proceeding with deposit.","timestamp":"2025-11-08 10:05:04"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Service failed: url is not defined. Proceeding with deposit.","timestamp":"2025-11-08 10:17:26"}
+{"level":"error","message":"❌ Deposit error: 9PSB Service failed: url is not defined","timestamp":"2025-11-08 10:17:26"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Balance Enquiry successful, but balance data is missing in response.. Proceeding with deposit.","timestamp":"2025-11-08 10:23:21"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: 9PSB Balance Enquiry successful, but balance data is missing in response.. Proceeding with deposit.","timestamp":"2025-11-08 10:52:06"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 11:08:10"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 11:17:23"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 11:17:59"}
+{"level":"warn","message":"Could not fetch pre-deposit balance for 1100068858: url is not defined. Proceeding with deposit.","timestamp":"2025-11-08 13:49:24"}
+{"level":"error","message":"❌ Deposit error: url is not defined","timestamp":"2025-11-08 13:49:24"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 13:51:57"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 14:10:13"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 14:13:47"}
+{"level":"error","message":"❌ Deposit error: Cannot read properties of undefined (reading 'success')","timestamp":"2025-11-08 14:13:51"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: NaN","timestamp":"2025-11-08 14:22:31"}
+{"level":"error","message":"❌ Deposit error: Cannot read properties of undefined (reading 'success')","timestamp":"2025-11-08 14:22:34"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: 70403.4","timestamp":"2025-11-08 14:34:27"}
+{"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068858: 71393.4","timestamp":"2025-11-08 14:34:31"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: 71393.4","timestamp":"2025-11-08 15:01:06"}
+{"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068858: 72384","timestamp":"2025-11-08 15:01:10"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068858: 72384","timestamp":"2025-11-08 15:14:08"}
+{"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068858: 74324","timestamp":"2025-11-08 15:14:12"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068810: 0","timestamp":"2025-11-08 16:13:41"}
+{"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068810: 49940","timestamp":"2025-11-08 16:13:45"}
+{"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068810: 49940","timestamp":"2025-11-08 16:16:51"}
+{"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068810: 50930","timestamp":"2025-11-08 16:16:55"}

@@ -6,6 +6,7 @@ const cors = require('cors');
 const webhookRoutes = require("./routes/webhookRoutes");
 const connectDataBase = require('./config/db');
 const authRoutes = require("./routes/authRoutes")
+const adminRoutes = require("./routes/adminRoutes")
 const kycRoutes = require("./routes/kycRoutes")
 const walletRoutes = require ("./routes/walletRoutes");
 const transactionRoutes = require ("./routes/transactionRoute");
@@ -13,9 +14,7 @@ const transferRoutes = require ("./routes/transferRoute");
 const p2pRoutes = require ("./routes/p2pRoute");
 const merchantRoutes = require ("./routes/merchantRoutes");
 
-
 const app = express();
-
 
 const allowedOrigins = ["https://finstack-vert.vercel.app", "http://localhost:3000"]
 
@@ -40,8 +39,6 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
-
-
 // Database connection
 connectDataBase();
 
@@ -51,13 +48,15 @@ app.get("/", (req, res) => {
 
 // Routes
 app.use("/api", authRoutes)
+app.use("/api", adminRoutes)
 app.use("/api", kycRoutes)
 app.use("/api", walletRoutes)
 app.use("/api", transactionRoutes)
 app.use("/api", transferRoutes)
 app.use("/api", p2pRoutes)
 app.use("/api", merchantRoutes)
-app.use("/api/webhooks", webhookRoutes)
+// app.use("/api/webhooks", webhookRoutes)
+app.use("/", webhookRoutes)
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, ()=>{

@@ -2989,13 +2989,463 @@
 //   getSingleKyc,
 // };
 
+// // ONLY ONE ACCOUNT PER USER
+// const mongoose = require("mongoose");
+// const Joi = require("joi");
+// const Kyc = require("../models/kycModel");
+// // NOTE: Assuming Wallet model, createNairaWallet, and createBlockradarWallet are imported from elsewhere
+// const Wallet = require("../models/walletModel");
+// const { createNairaWallet } = require("../services/providers/ninePSBServices");
+// const { createBlockradarWallet } = require("../services/providers/blockrader");
+
+// const cloudinary = require("cloudinary").v2;
+// const extractPublicId = require("../utilities/extractPublicId");
+// const { verifyBVN, verifyNIN } = require("../services/prembly");
+
+// // ✅ FIX 1: Import the decryption utility
+// const { decrypt } = require('../utilities/encryptionUtils');
+
+
+// // --------------------- Joi Validation ---------------------
+// const kycSchema = Joi.object({
+//   firstname: Joi.string().required(),
+//   lastname: Joi.string().required(),
+//   gender: Joi.string().valid("MALE", "FEMALE").required(),
+//   dob: Joi.date().required(),
+//   phone_number: Joi.string().required(),
+//   address: Joi.string().required(),
+//   state: Joi.string().required(),
+//   city: Joi.string().required(),
+//   country: Joi.string().required(),
+//   bvn: Joi.string().optional(),
+//   nin_number: Joi.string().optional(),
+//   id_type: Joi.string().required(),
+//   id_number: Joi.string().required(),
+//   id_expiry: Joi.string().optional(),
+// });
+
+// // --------------------- Helper: Cloudinary Cleanup ---------------------
+// async function cleanupFiles(files) {
+//   if (!files) return;
+//   const allFiles = [
+//     files.selfie?.[0]?.path,
+//     files.proof_address?.[0]?.path,
+//     files.proof_id_front?.[0]?.path,
+//     files.proof_id_back?.[0]?.path,
+//   ].filter(Boolean);
+
+//   if (allFiles.length === 0) return;
+//   for (const file of allFiles) {
+//     const publicId = extractPublicId(file);
+//     try {
+//       await cloudinary.uploader.destroy(publicId);
+//     } catch (e) {
+//       console.warn("⚠️ Cleanup failed:", e.message);
+//     }
+//   }
+// }
+
+// // --------------------- Controller: Submit KYC ---------------------
+// const submitKYC = async (req, res) => {
+// if (!req.user || !req.user.id) {
+//   return res.status(401).json({ message: "Unauthorized: No user context found" });
+// }
+
+// const userId = req.user.id; 
+
+
+//   const session = await mongoose.startSession();
+//   session.startTransaction();
+
+//   try {
+//     // ✅ 1. Validate request body
+//     const { error } = kycSchema.validate(req.body);
+//     if (error) {
+//       await cleanupFiles(req.files);
+//       return res.status(400).json({ message: error.details[0].message });
+//     }
+
+//     const {
+//       firstname,
+//       lastname,
+//       gender,
+//       dob,
+//       bvn,
+//       nin_number,
+//       nin_user_id,
+//       phone_number,
+//       address,
+//       state,
+//       city,
+//       country,
+//       id_type,
+//       id_number,
+//       id_expiry,
+//     } = req.body;
+
+
+//     // ✅ 2. Prevent duplicate KYC requests
+//     const existingKYC = await Kyc.findOne({
+//       user_id: userId,
+//       status: { $in: ["PENDING", "APPROVED"] },
+//     }).session(session);
+//     if (existingKYC) {
+//       await cleanupFiles(req.files);
+//       await session.abortTransaction();
+//       return res.status(400).json({ message: "KYC already submitted or approved" });
+//     }
+
+//     // ✅ 3. Nigerian-specific BVN + NIN verification
+//     let verifiedFirstName = firstname.trim();
+//     let verifiedLastName = lastname.trim();
+//     let verifiedDob = dob;
+
+//     if (country.toLowerCase() === "nigeria") {
+//       if (!bvn || !nin_number) {
+//         throw new Error("BVN and NIN are required for Nigerian users");
+//       }
+
+//       // 💡 NOTE: Decrypting during the initial submission verification (Prembly) might also be necessary here
+//       // Assuming verifyBVN and verifyNIN handle decryption internally or the submitted data is not encrypted yet.
+
+//       const bvnResult = await verifyBVN(bvn);
+//       const ninResult = await verifyNIN(nin_number);
+
+//       if (!bvnResult?.status) throw new Error("BVN verification failed");
+//       if (!ninResult?.status) throw new Error("NIN verification failed");
+
+//       const bvnData = bvnResult.data;
+//       const ninData = ninResult.data || ninResult.nin_data;
+
+//       const bvnFirst = bvnData.firstName?.toLowerCase();
+//       const bvnLast = bvnData.lastName?.toLowerCase();
+//       const ninFirst = (ninData.firstName || ninData.firstname)?.toLowerCase();
+//       const ninLast = (ninData.lastName || ninData.surname)?.toLowerCase();
+
+//       if (bvnFirst !== ninFirst || bvnLast !== ninLast) {
+//         throw new Error("BVN and NIN details do not match");
+//       }
+
+//       verifiedFirstName = bvnData.firstName;
+//       verifiedLastName = bvnData.lastName;
+//       verifiedDob = bvnData.dateOfBirth || ninData.dateOfBirth || dob;
+//     }
+
+//     // ✅ 4. 🔹 PLACE THE CONDITIONAL UPLOAD SNIPPET HERE 🔹
+//     // ------------------ Conditional Proof Uploads ------------------
+//     let selfiePath = req.files?.selfie?.[0]?.path || null;
+//     let proofAddressPath = null;
+//     let proofId = { front: null, back: null };
+
+//     // If BVN and NIN are both provided, no need for extra proof documents
+//     if (!(bvn && nin_number)) {
+//       proofAddressPath = req.files?.proof_address?.[0]?.path || null;
+//       proofId = {
+//         front: req.files?.proof_id_front?.[0]?.path || null,
+//         back: req.files?.proof_id_back?.[0]?.path || null,
+//       };
+//     } else {
+//       console.log("✅ BVN & NIN provided — skipping proof uploads.");
+//     }
+
+//     // ✅ 5. Save to DB
+//     const kycData = new Kyc({
+//       firstname: verifiedFirstName,
+//       lastname: verifiedLastName,
+//       gender: gender.toUpperCase(),
+//       dob: verifiedDob,
+//       bvn, // This is the encrypted BVN
+//       nin_number, // This is the encrypted NIN
+//       nin_user_id,
+//       phone_number,
+//       address,
+//       state,
+//       city,
+//       country,
+//       id_type: id_type.toUpperCase(),
+//       id_number,
+//       id_expiry,
+//       selfie: selfiePath,
+//       proof_address: proofAddressPath,
+//       proof_id: proofId,
+//       user_id: userId,
+//     });
+
+//     await kycData.save({ session });
+//     await session.commitTransaction();
+//     setImmediate(() => cleanupFiles(req.files));
+
+//     return res.status(201).json({
+//       message: "KYC submitted successfully and is under review",
+//       data: kycData,
+//     });
+//   } catch (error) {
+//     console.error("❌ KYC submission error:", error.message);
+//     await cleanupFiles(req.files);
+//     await session.abortTransaction();
+//     session.endSession();
+//     return res.status(500).json({ message: error.message || "Internal server error" });
+//   }
+// };
+
+// // --------------------- Helper: Generate Compliant NIN User ID ---------------------
+// /**
+//  * Generates a random NIN User ID compliant with 9PSB format: 6 letters followed by a hyphen and 4 digits (e.g., 'ABCDEF-0123').
+//  * @returns {string} The formatted NIN User ID.
+//  */
+// const generateNinUserIdFallback = () => {
+//     // Generates a random 6-letter string (e.g., 'AJKLSN')
+//     const randomLetters = Array.from({ length: 6 }, () => 
+//       String.fromCharCode(65 + Math.floor(Math.random() * 26)) // 65 is 'A'
+//     ).join('');
+    
+//     // Generates a random 4-digit string (e.g., '5842')
+//     const randomDigits = Math.floor(1000 + Math.random() * 9000).toString(); 
+    
+//     return `${randomLetters}-${randomDigits}`;
+// };
+
+// // --------------------- Admin Updates KYC ---------------------
+// const adminUpdateKycStatus = async (req, res) => {
+//     // 🔒 Assumed: Admin role check is done before this function runs or at the start
+//     if (!req.user || req.user.role !== "admin")
+//         return res.status(403).json({ message: "Forbidden: admin only" });
+
+//     const session = await mongoose.startSession();
+//     session.startTransaction();
+
+//     try {
+//         const { id, status, rejectionReason } = req.body;
+//         if (!id || !status) throw new Error("KYC ID and status are required");
+
+//         // Populate user details along with KYC data
+//         const newKyc = await Kyc.findById(id).populate("user_id", "email firstName lastName").session(session);
+//         if (!newKyc) throw new Error("KYC record not found");
+
+//         newKyc.status = status.toUpperCase();
+//         if (status.toUpperCase() === "REJECTED" && rejectionReason)
+//             newKyc.rejectionReason = rejectionReason;
+
+//         // 1. Save the new KYC status (APPROVED/REJECTED) within the transaction
+//         await newKyc.save({ session });
+
+//         // ======================= WALLET CREATION LOGIC =======================
+//         if (status.toUpperCase() === "APPROVED") {
+
+//             const isNigerianUser = newKyc.country.toLowerCase() === "nigeria";
+
+//             if (isNigerianUser) {
+//                 // 2. 🇳🇬 NIGERIAN USER: CREATE PRIMARY NAIRA (9PSB) WALLET ONLY
+                
+//                 // ------------------ NIN/IDENTITY DECRYPTION & VALIDATION ------------------
+//                 const decryptedNin = newKyc.nin_number ? decrypt(newKyc.nin_number) : null;
+//                 const decryptedBvn = newKyc.bvn ? decrypt(newKyc.bvn) : null; 
+
+//                 const nin = decryptedNin; 
+//                 let nationalIdentityNo = null;
+
+//                 if (nin) {
+//                     const cleanedNin = nin.trim();
+//                     if (cleanedNin.length !== 11 || !/^\d+$/.test(cleanedNin)) {
+//                         throw new Error(`CRITICAL DATA ERROR: Decrypted NIN ('${cleanedNin}') is not 11 digits. Please check user's Kyc record in DB.`);
+//                     }
+//                     nationalIdentityNo = cleanedNin;
+//                 } else {
+//                     throw new Error("CRITICAL DATA ERROR: NIN is null or missing for a Nigerian user.");
+//                 }
+//                 // --------------------------------------------------------------------------
+
+//                 // Format DOB (dd/MM/yyyy)
+//                 const dob = new Date(newKyc.dob);
+//                 const formattedDOB = `${dob.getDate().toString().padStart(2, "0")}/${(dob.getMonth() + 1).toString().padStart(2, "0")}/${dob.getFullYear()}`;
+
+//                 // Map gender string to required integer code (0=Male, 1=Female)
+//                 const genderCode = newKyc.gender === 'MALE' ? 0 : (newKyc.gender === 'FEMALE' ? 1 : null);
+                
+//                 if (genderCode === null) {
+//                     throw new Error(`Invalid or missing gender in KYC record: ${newKyc.gender}`);
+//                 }
+
+//                 // Prepare Payload
+//                 const payload = {
+//                     transactionTrackingRef: `TX-${Date.now()}`,
+//                     lastName: newKyc.lastname,
+//                     otherNames: newKyc.firstname,
+//                     accountName: `${newKyc.firstname} ${newKyc.lastname}`,
+//                     phoneNo: newKyc.phone_number,
+//                     gender: genderCode, 
+//                     dateOfBirth: formattedDOB,
+//                     address: newKyc.address,
+//                     email: newKyc.user_id.email,
+//                     nationalIdentityNo: nationalIdentityNo, 
+//                     // Use stored ninUserId or fallback ONLY if needed
+//                     ninUserId: newKyc.nin_user_id || generateNinUserIdFallback(), 
+//                     bvn: decryptedBvn || null, 
+//                 };
+
+//                 let walletData = null;
+                
+//                 // 🚨 FIX: Isolate the API call and check for the paradoxical success error
+//                 try {
+//                     walletData = await createNairaWallet(payload);
+//                 } catch (apiError) {
+//                     // Check if the error message contains the known success string.
+//                     if (apiError.message.includes("Account Opening successful")) {
+//                         console.warn(
+//                             "⚠️ 9PSB Paradoxical Success: Account opening succeeded on the 9PSB side, but the 'createNairaWallet' service function threw an error. This likely means the successful response body was malformed, missing the 'data' field, or missing required sub-fields (accountNumber/fullName)."
+//                         );
+//                         // We must re-throw, as we cannot safely update our DB without the account number.
+//                         throw new Error(`9PSB Wallet Creation failed: Account Opening successful (Database rollback initiated because successful response data was missing or incomplete. Check the 9PSB service function code!)`);
+//                     } else {
+//                         // Re-throw a genuine failure
+//                         throw apiError; 
+//                     }
+//                 }
+                
+//                 // Ensure walletData is present and structured correctly before continuing
+//                 if (!walletData?.data?.accountNumber || !walletData?.data?.fullName) {
+//                     // This handles cases where the call didn't throw, but returned bad data
+//                     throw new Error("9PSB Wallet Creation failed: API response was missing required 'accountNumber' or 'fullName' fields.");
+//                 }
+
+
+//                 // CRITICAL: Use compound key (user_id, currency) and add required walletType
+//                 await Wallet.findOneAndUpdate(
+//                     { user_id: newKyc.user_id._id, currency: "NGN" }, 
+//                     {
+//                         currency: "NGN", 
+//                         walletType: "USER", 
+//                         accountNumber: walletData.data.accountNumber, 
+//                         accountName: walletData.data.fullName,      
+//                         provider: "9PSB",
+//                         status: "ACTIVE",
+//                     },
+//                     { 
+//                         upsert: true, 
+//                         new: true, 
+//                         session 
+//                     } 
+//                 );
+//                 console.log(`✅ NGN 9PSB wallet successfully created for ${newKyc.user_id.email}`);
+
+//             } else {
+//                 // 3. 🌐 NON-NIGERIAN USER: CREATE PRIMARY USD (BLOCKRADAR) WALLET ONLY
+//                 try {
+//                     await createBlockradarWallet({ 
+//                         userId: newKyc.user_id._id,
+//                         email: newKyc.user_id.email,
+//                         name: `${newKyc.firstname} ${newKyc.lastname}`,
+//                         currency: "USD",
+//                     });
+//                     console.log(`✅ USD Blockradar wallet successfully created for ${newKyc.user_id.email}`);
+//                 } catch (err) {
+//                     // Failure is critical since this is the only wallet for them.
+//                     console.error("❌ CRITICAL: Blockradar failed for non-Nigerian user (Rolling back).", err.message);
+//                     throw new Error("Failed to create primary USD wallet via Blockradar: " + err.message);
+//                 }
+//             }
+//         }
+//         // =====================================================================
+
+//         // Commit all changes (KYC status + Wallet saves/updates) if successful
+//         await session.commitTransaction(); 
+//         session.endSession();
+//         return res.status(200).json({ message: `KYC status updated to ${status}` });
+
+//     } catch (error) { 
+//         // 🛑 Centralized rollback if any step (DB save or API call) failed
+//         console.error("❌ Update KYC error:", error.message);
+//         await session.abortTransaction();
+//         session.endSession();
+//         // Return the specific error message to the admin
+//         return res.status(500).json({ message: error.message || "Internal server error" });
+//     }
+// };
+// /* -------------------------------------------------------------------------- */
+// /*                            ADMIN: Get All KYC Records                      */
+// /* -------------------------------------------------------------------------- */
+// const getAllKycRecords = async (req, res) => {
+//   try {
+//     const kycRecords = await Kyc.find().populate(
+//       "user_id",
+//       "email firstName lastName"
+//     );
+//     return res.status(200).json({
+//       message: "KYC records fetched successfully",
+//       data: kycRecords,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error fetching KYC records:", error);
+//     return res.status(500).json({
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// /* -------------------------------------------------------------------------- */
+// /*                          USER/ADMIN: Get Single KYC Record                 */
+// /* -------------------------------------------------------------------------- */
+// const getSingleKyc = async (req, res) => {
+//   try {
+//     const { id } = req.params;
+//     const { searchByUserId = false } = req.query;
+//     let kycRecord;
+
+//     if (req.user.role === "admin") {
+//       if (searchByUserId === "true") {
+//         kycRecord = await Kyc.findOne({ user_id: id }).populate(
+//           "user_id",
+//           "email firstName lastName"
+//         );
+//       } else {
+//         kycRecord = await Kyc.findById(id).populate(
+//           "user_id",
+//           "email firstName lastName"
+//         );
+//       }
+//     } else {
+//       kycRecord = await Kyc.findOne({ user_id: req.user._id }).populate(
+//         "user_id",
+//         "email firstName lastName"
+//       );
+//     }
+
+//     if (!kycRecord) {
+//       return res.status(404).json({ message: "KYC record not found" });
+//     }
+
+//     return res.status(200).json({
+//       message: "KYC record fetched successfully",
+//       data: kycRecord,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error fetching single KYC record:", error);
+//     return res.status(500).json({
+//       message: "Internal server error",
+//       error: error.message,
+//     });
+//   }
+// };
+
+// /* -------------------------------------------------------------------------- */
+// /*                                   EXPORTS                                  */
+// /* -------------------------------------------------------------------------- */
+// module.exports = {
+//   submitKYC,
+//   adminUpdateKycStatus,
+//   getAllKycRecords,
+//   getSingleKyc,
+// };
+
+// TESTING 
 // ONLY ONE ACCOUNT PER USER
 const mongoose = require("mongoose");
 const Joi = require("joi");
 const Kyc = require("../models/kycModel");
 // NOTE: Assuming Wallet model, createNairaWallet, and createBlockradarWallet are imported from elsewhere
 const Wallet = require("../models/walletModel");
-const { createNairaWallet } = require("../services/providers/ninePSBServices");
+// const { createNairaWallet } = require("../services/providers/ninePSBServices");
 const { createBlockradarWallet } = require("../services/providers/blockrader");
 
 const cloudinary = require("cloudinary").v2;
@@ -3006,434 +3456,261 @@ const { verifyBVN, verifyNIN } = require("../services/prembly");
 const { decrypt } = require('../utilities/encryptionUtils');
 
 
+// --------------------- MOCK TESTING CONSTANTS ---------------------
+// Use these values in your Postman request to bypass live BVN/NIN verification.
+const TEST_BVN = '11111111111'; 
+const TEST_NIN = '11111111111';
+// ------------------------------------------------------------------
+
+
 // --------------------- Joi Validation ---------------------
 const kycSchema = Joi.object({
-  firstname: Joi.string().required(),
-  lastname: Joi.string().required(),
-  gender: Joi.string().valid("MALE", "FEMALE").required(),
-  dob: Joi.date().required(),
-  phone_number: Joi.string().required(),
-  address: Joi.string().required(),
-  state: Joi.string().required(),
-  city: Joi.string().required(),
-  country: Joi.string().required(),
-  bvn: Joi.string().optional(),
-  nin_number: Joi.string().optional(),
-  id_type: Joi.string().required(),
-  id_number: Joi.string().required(),
-  id_expiry: Joi.string().optional(),
+  firstname: Joi.string().required(),
+  lastname: Joi.string().required(),
+  gender: Joi.string().valid("MALE", "FEMALE").required(),
+  dob: Joi.date().required(),
+  phone_number: Joi.string().required(),
+  address: Joi.string().required(),
+  state: Joi.string().required(),
+  city: Joi.string().required(),
+  country: Joi.string().required(),
+  bvn: Joi.string().optional(),
+  nin_number: Joi.string().optional(),
+  id_type: Joi.string().required(),
+  id_number: Joi.string().required(),
+  id_expiry: Joi.string().optional(),
 });
 
 // --------------------- Helper: Cloudinary Cleanup ---------------------
 async function cleanupFiles(files) {
-  if (!files) return;
-  const allFiles = [
-    files.selfie?.[0]?.path,
-    files.proof_address?.[0]?.path,
-    files.proof_id_front?.[0]?.path,
-    files.proof_id_back?.[0]?.path,
-  ].filter(Boolean);
+  if (!files) return;
+  const allFiles = [
+    files.selfie?.[0]?.path,
+    files.proof_address?.[0]?.path,
+    files.proof_id_front?.[0]?.path,
+    files.proof_id_back?.[0]?.path,
+  ].filter(Boolean);
 
-  if (allFiles.length === 0) return;
-  for (const file of allFiles) {
-    const publicId = extractPublicId(file);
-    try {
-      await cloudinary.uploader.destroy(publicId);
-    } catch (e) {
-      console.warn("⚠️ Cleanup failed:", e.message);
-    }
-  }
+  if (allFiles.length === 0) return;
+  for (const file of allFiles) {
+    const publicId = extractPublicId(file);
+    try {
+      await cloudinary.uploader.destroy(publicId);
+    } catch (e) {
+      console.warn("⚠️ Cleanup failed:", e.message);
+    }
+  }
 }
 
-// --------------------- Controller: Submit KYC ---------------------
+// --------------------- Controller: Submit KYC (UPDATED) ---------------------
 const submitKYC = async (req, res) => {
-if (!req.user || !req.user.id) {
-  return res.status(401).json({ message: "Unauthorized: No user context found" });
-}
-
-const userId = req.user.id; 
-
-
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
-  try {
-    // ✅ 1. Validate request body
-    const { error } = kycSchema.validate(req.body);
-    if (error) {
-      await cleanupFiles(req.files);
-      return res.status(400).json({ message: error.details[0].message });
+    if (!req.user || !req.user.id) {
+        return res.status(401).json({ message: "Unauthorized: No user context found" });
     }
 
-    const {
-      firstname,
-      lastname,
-      gender,
-      dob,
-      bvn,
-      nin_number,
-      nin_user_id,
-      phone_number,
-      address,
-      state,
-      city,
-      country,
-      id_type,
-      id_number,
-      id_expiry,
-    } = req.body;
-
-
-    // ✅ 2. Prevent duplicate KYC requests
-    const existingKYC = await Kyc.findOne({
-      user_id: userId,
-      status: { $in: ["PENDING", "APPROVED"] },
-    }).session(session);
-    if (existingKYC) {
-      await cleanupFiles(req.files);
-      await session.abortTransaction();
-      return res.status(400).json({ message: "KYC already submitted or approved" });
-    }
-
-    // ✅ 3. Nigerian-specific BVN + NIN verification
-    let verifiedFirstName = firstname.trim();
-    let verifiedLastName = lastname.trim();
-    let verifiedDob = dob;
-
-    if (country.toLowerCase() === "nigeria") {
-      if (!bvn || !nin_number) {
-        throw new Error("BVN and NIN are required for Nigerian users");
-      }
-
-      // 💡 NOTE: Decrypting during the initial submission verification (Prembly) might also be necessary here
-      // Assuming verifyBVN and verifyNIN handle decryption internally or the submitted data is not encrypted yet.
-
-      const bvnResult = await verifyBVN(bvn);
-      const ninResult = await verifyNIN(nin_number);
-
-      if (!bvnResult?.status) throw new Error("BVN verification failed");
-      if (!ninResult?.status) throw new Error("NIN verification failed");
-
-      const bvnData = bvnResult.data;
-      const ninData = ninResult.data || ninResult.nin_data;
-
-      const bvnFirst = bvnData.firstName?.toLowerCase();
-      const bvnLast = bvnData.lastName?.toLowerCase();
-      const ninFirst = (ninData.firstName || ninData.firstname)?.toLowerCase();
-      const ninLast = (ninData.lastName || ninData.surname)?.toLowerCase();
-
-      if (bvnFirst !== ninFirst || bvnLast !== ninLast) {
-        throw new Error("BVN and NIN details do not match");
-      }
-
-      verifiedFirstName = bvnData.firstName;
-      verifiedLastName = bvnData.lastName;
-      verifiedDob = bvnData.dateOfBirth || ninData.dateOfBirth || dob;
-    }
-
-    // ✅ 4. 🔹 PLACE THE CONDITIONAL UPLOAD SNIPPET HERE 🔹
-    // ------------------ Conditional Proof Uploads ------------------
-    let selfiePath = req.files?.selfie?.[0]?.path || null;
-    let proofAddressPath = null;
-    let proofId = { front: null, back: null };
-
-    // If BVN and NIN are both provided, no need for extra proof documents
-    if (!(bvn && nin_number)) {
-      proofAddressPath = req.files?.proof_address?.[0]?.path || null;
-      proofId = {
-        front: req.files?.proof_id_front?.[0]?.path || null,
-        back: req.files?.proof_id_back?.[0]?.path || null,
-      };
-    } else {
-      console.log("✅ BVN & NIN provided — skipping proof uploads.");
-    }
-
-    // ✅ 5. Save to DB
-    const kycData = new Kyc({
-      firstname: verifiedFirstName,
-      lastname: verifiedLastName,
-      gender: gender.toUpperCase(),
-      dob: verifiedDob,
-      bvn, // This is the encrypted BVN
-      nin_number, // This is the encrypted NIN
-      nin_user_id,
-      phone_number,
-      address,
-      state,
-      city,
-      country,
-      id_type: id_type.toUpperCase(),
-      id_number,
-      id_expiry,
-      selfie: selfiePath,
-      proof_address: proofAddressPath,
-      proof_id: proofId,
-      user_id: userId,
-    });
-
-    await kycData.save({ session });
-    await session.commitTransaction();
-    setImmediate(() => cleanupFiles(req.files));
-
-    return res.status(201).json({
-      message: "KYC submitted successfully and is under review",
-      data: kycData,
-    });
-  } catch (error) {
-    console.error("❌ KYC submission error:", error.message);
-    await cleanupFiles(req.files);
-    await session.abortTransaction();
-    session.endSession();
-    return res.status(500).json({ message: error.message || "Internal server error" });
-  }
-};
-
-// --------------------- Helper: Generate Compliant NIN User ID ---------------------
-/**
- * Generates a random NIN User ID compliant with 9PSB format: 6 letters followed by a hyphen and 4 digits (e.g., 'ABCDEF-0123').
- * @returns {string} The formatted NIN User ID.
- */
-const generateNinUserIdFallback = () => {
-    // Generates a random 6-letter string (e.g., 'AJKLSN')
-    const randomLetters = Array.from({ length: 6 }, () => 
-      String.fromCharCode(65 + Math.floor(Math.random() * 26)) // 65 is 'A'
-    ).join('');
-    
-    // Generates a random 4-digit string (e.g., '5842')
-    const randomDigits = Math.floor(1000 + Math.random() * 9000).toString(); 
-    
-    return `${randomLetters}-${randomDigits}`;
-};
-
-// --------------------- Admin Updates KYC ---------------------
-const adminUpdateKycStatus = async (req, res) => {
-    // 🔒 Assumed: Admin role check is done before this function runs or at the start
-    if (!req.user || req.user.role !== "admin")
-        return res.status(403).json({ message: "Forbidden: admin only" });
-
+    const userId = req.user.id; 
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        const { id, status, rejectionReason } = req.body;
-        if (!id || !status) throw new Error("KYC ID and status are required");
-
-        // Populate user details along with KYC data
-        const newKyc = await Kyc.findById(id).populate("user_id", "email firstName lastName").session(session);
-        if (!newKyc) throw new Error("KYC record not found");
-
-        newKyc.status = status.toUpperCase();
-        if (status.toUpperCase() === "REJECTED" && rejectionReason)
-            newKyc.rejectionReason = rejectionReason;
-
-        // 1. Save the new KYC status (APPROVED/REJECTED) within the transaction
-        await newKyc.save({ session });
-
-        // ======================= WALLET CREATION LOGIC =======================
-        if (status.toUpperCase() === "APPROVED") {
-
-            const isNigerianUser = newKyc.country.toLowerCase() === "nigeria";
-
-            if (isNigerianUser) {
-                // 2. 🇳🇬 NIGERIAN USER: CREATE PRIMARY NAIRA (9PSB) WALLET ONLY
-                
-                // ------------------ NIN/IDENTITY DECRYPTION & VALIDATION ------------------
-                const decryptedNin = newKyc.nin_number ? decrypt(newKyc.nin_number) : null;
-                const decryptedBvn = newKyc.bvn ? decrypt(newKyc.bvn) : null; 
-
-                const nin = decryptedNin; 
-                let nationalIdentityNo = null;
-
-                if (nin) {
-                    const cleanedNin = nin.trim();
-                    if (cleanedNin.length !== 11 || !/^\d+$/.test(cleanedNin)) {
-                        throw new Error(`CRITICAL DATA ERROR: Decrypted NIN ('${cleanedNin}') is not 11 digits. Please check user's Kyc record in DB.`);
-                    }
-                    nationalIdentityNo = cleanedNin;
-                } else {
-                    throw new Error("CRITICAL DATA ERROR: NIN is null or missing for a Nigerian user.");
-                }
-                // --------------------------------------------------------------------------
-
-                // Format DOB (dd/MM/yyyy)
-                const dob = new Date(newKyc.dob);
-                const formattedDOB = `${dob.getDate().toString().padStart(2, "0")}/${(dob.getMonth() + 1).toString().padStart(2, "0")}/${dob.getFullYear()}`;
-
-                // Map gender string to required integer code (0=Male, 1=Female)
-                const genderCode = newKyc.gender === 'MALE' ? 0 : (newKyc.gender === 'FEMALE' ? 1 : null);
-                
-                if (genderCode === null) {
-                    throw new Error(`Invalid or missing gender in KYC record: ${newKyc.gender}`);
-                }
-
-                // Prepare Payload
-                const payload = {
-                    transactionTrackingRef: `TX-${Date.now()}`,
-                    lastName: newKyc.lastname,
-                    otherNames: newKyc.firstname,
-                    accountName: `${newKyc.firstname} ${newKyc.lastname}`,
-                    phoneNo: newKyc.phone_number,
-                    gender: genderCode, 
-                    dateOfBirth: formattedDOB,
-                    address: newKyc.address,
-                    email: newKyc.user_id.email,
-                    nationalIdentityNo: nationalIdentityNo, 
-                    // Use stored ninUserId or fallback ONLY if needed
-                    ninUserId: newKyc.nin_user_id || generateNinUserIdFallback(), 
-                    bvn: decryptedBvn || null, 
-                };
-
-                let walletData = null;
-                
-                // 🚨 FIX: Isolate the API call and check for the paradoxical success error
-                try {
-                    walletData = await createNairaWallet(payload);
-                } catch (apiError) {
-                    // Check if the error message contains the known success string.
-                    if (apiError.message.includes("Account Opening successful")) {
-                        console.warn(
-                            "⚠️ 9PSB Paradoxical Success: Account opening succeeded on the 9PSB side, but the 'createNairaWallet' service function threw an error. This likely means the successful response body was malformed, missing the 'data' field, or missing required sub-fields (accountNumber/fullName)."
-                        );
-                        // We must re-throw, as we cannot safely update our DB without the account number.
-                        throw new Error(`9PSB Wallet Creation failed: Account Opening successful (Database rollback initiated because successful response data was missing or incomplete. Check the 9PSB service function code!)`);
-                    } else {
-                        // Re-throw a genuine failure
-                        throw apiError; 
-                    }
-                }
-                
-                // Ensure walletData is present and structured correctly before continuing
-                if (!walletData?.data?.accountNumber || !walletData?.data?.fullName) {
-                    // This handles cases where the call didn't throw, but returned bad data
-                    throw new Error("9PSB Wallet Creation failed: API response was missing required 'accountNumber' or 'fullName' fields.");
-                }
-
-
-                // CRITICAL: Use compound key (user_id, currency) and add required walletType
-                await Wallet.findOneAndUpdate(
-                    { user_id: newKyc.user_id._id, currency: "NGN" }, 
-                    {
-                        currency: "NGN", 
-                        walletType: "USER", 
-                        accountNumber: walletData.data.accountNumber, 
-                        accountName: walletData.data.fullName,      
-                        provider: "9PSB",
-                        status: "ACTIVE",
-                    },
-                    { 
-                        upsert: true, 
-                        new: true, 
-                        session 
-                    } 
-                );
-                console.log(`✅ NGN 9PSB wallet successfully created for ${newKyc.user_id.email}`);
-
-            } else {
-                // 3. 🌐 NON-NIGERIAN USER: CREATE PRIMARY USD (BLOCKRADAR) WALLET ONLY
-                try {
-                    await createBlockradarWallet({ 
-                        userId: newKyc.user_id._id,
-                        email: newKyc.user_id.email,
-                        name: `${newKyc.firstname} ${newKyc.lastname}`,
-                        currency: "USD",
-                    });
-                    console.log(`✅ USD Blockradar wallet successfully created for ${newKyc.user_id.email}`);
-                } catch (err) {
-                    // Failure is critical since this is the only wallet for them.
-                    console.error("❌ CRITICAL: Blockradar failed for non-Nigerian user (Rolling back).", err.message);
-                    throw new Error("Failed to create primary USD wallet via Blockradar: " + err.message);
-                }
-            }
+        // ✅ 1. Validate request body
+        const { error } = kycSchema.validate(req.body);
+        if (error) {
+            await cleanupFiles(req.files);
+            return res.status(400).json({ message: error.details[0].message });
         }
-        // =====================================================================
 
-        // Commit all changes (KYC status + Wallet saves/updates) if successful
-        await session.commitTransaction(); 
-        session.endSession();
-        return res.status(200).json({ message: `KYC status updated to ${status}` });
+        const {
+            firstname,
+            lastname,
+            gender,
+            dob,
+            bvn,
+            nin_number,
+            nin_user_id,
+            phone_number,
+            address,
+            state,
+            city,
+            country,
+            id_type,
+            id_number,
+            id_expiry,
+        } = req.body;
 
-    } catch (error) { 
-        // 🛑 Centralized rollback if any step (DB save or API call) failed
-        console.error("❌ Update KYC error:", error.message);
+
+        // ✅ 2. Prevent duplicate KYC requests
+        const existingKYC = await Kyc.findOne({
+            user_id: userId,
+            status: { $in: ["PENDING", "APPROVED"] },
+        }).session(session);
+        if (existingKYC) {
+            await cleanupFiles(req.files);
+            await session.abortTransaction();
+            return res.status(400).json({ message: "KYC already submitted or approved" });
+        }
+
+        // ✅ 3. Nigerian-specific BVN + NIN verification
+        let verifiedFirstName = firstname.trim();
+        let verifiedLastName = lastname.trim();
+        let verifiedDob = dob;
+
+        if (country.toLowerCase() === "nigeria") {
+            if (!bvn || !nin_number) {
+                throw new Error("BVN and NIN are required for Nigerian users");
+            }
+            
+            // -------------------- START TEST BYPASS CHECK --------------------
+            const isTestBypass = bvn === TEST_BVN && nin_number === TEST_NIN;
+            
+            if (isTestBypass) {
+                console.warn("⚠️ TEST BYPASS ACTIVE: Skipping external BVN/NIN verification. Relying on submitted data.");
+                // Use submitted data directly, implicitly passing verification
+                verifiedFirstName = firstname.trim();
+                verifiedLastName = lastname.trim();
+                verifiedDob = dob;
+                
+                // Ensure nin_user_id is generated if missing for the admin step
+                req.body.nin_user_id = req.body.nin_user_id || generateNinUserIdFallback();
+                
+            } else {
+                // -------------------- ORIGINAL PREMBLY VERIFICATION --------------------
+                // This block runs ONLY if the BVN/NIN are not the mock test values.
+                
+                // Assuming verifyBVN and verifyNIN handle decryption internally or the submitted data is not encrypted yet.
+
+                const bvnResult = await verifyBVN(bvn);
+                const ninResult = await verifyNIN(nin_number);
+
+                if (!bvnResult?.status) throw new Error("BVN verification failed");
+                if (!ninResult?.status) throw new Error("NIN verification failed");
+
+                const bvnData = bvnResult.data;
+                const ninData = ninResult.data || ninResult.nin_data;
+
+                const bvnFirst = bvnData.firstName?.toLowerCase();
+                const bvnLast = bvnData.lastName?.toLowerCase();
+                const ninFirst = (ninData.firstName || ninData.firstname)?.toLowerCase();
+                const ninLast = (ninData.lastName || ninData.surname)?.toLowerCase();
+
+                if (bvnFirst !== ninFirst || bvnLast !== ninLast) {
+                    throw new Error("BVN and NIN details do not match");
+                }
+
+                verifiedFirstName = bvnData.firstName;
+                verifiedLastName = bvnData.lastName;
+                verifiedDob = bvnData.dateOfBirth || ninData.dateOfBirth || dob;
+            }
+            // -------------------- END TEST BYPASS CHECK --------------------
+        }
+
+        // ✅ 4. 🔹 PLACE THE CONDITIONAL UPLOAD SNIPPET HERE 🔹
+        // ------------------ Conditional Proof Uploads ------------------
+        let selfiePath = req.files?.selfie?.[0]?.path || null;
+        let proofAddressPath = null;
+        let proofId = { front: null, back: null };
+
+        // If BVN and NIN are both provided, no need for extra proof documents
+        if (!(bvn && nin_number)) {
+            proofAddressPath = req.files?.proof_address?.[0]?.path || null;
+            proofId = {
+                front: req.files?.proof_id_front?.[0]?.path || null,
+                back: req.files?.proof_id_back?.[0]?.path || null,
+            };
+        } else {
+            console.log("✅ BVN & NIN provided — skipping proof uploads.");
+        }
+
+        // ✅ 5. Save to DB
+        const kycData = new Kyc({
+            firstname: verifiedFirstName,
+            lastname: verifiedLastName,
+            gender: gender.toUpperCase(),
+            dob: verifiedDob,
+            bvn, // This is the encrypted BVN
+            nin_number, // This is the encrypted NIN
+            nin_user_id: req.body.nin_user_id, // Use the potentially generated one
+            phone_number,
+            address,
+            state,
+            city,
+            country,
+            id_type: id_type.toUpperCase(),
+            id_number,
+            id_expiry,
+            selfie: selfiePath,
+            proof_address: proofAddressPath,
+            proof_id: proofId,
+            user_id: userId,
+            status: "PENDING", // Status is always PENDING initially
+        });
+
+        await kycData.save({ session });
+        await session.commitTransaction();
+        setImmediate(() => cleanupFiles(req.files));
+
+        return res.status(201).json({
+            message: "KYC submitted successfully and is under review",
+            data: kycData,
+        });
+    } catch (error) {
+        console.error("❌ KYC submission error:", error.message);
+        await cleanupFiles(req.files);
         await session.abortTransaction();
         session.endSession();
-        // Return the specific error message to the admin
         return res.status(500).json({ message: error.message || "Internal server error" });
     }
-};
-/* -------------------------------------------------------------------------- */
-/*                            ADMIN: Get All KYC Records                      */
-/* -------------------------------------------------------------------------- */
-const getAllKycRecords = async (req, res) => {
-  try {
-    const kycRecords = await Kyc.find().populate(
-      "user_id",
-      "email firstName lastName"
-    );
-    return res.status(200).json({
-      message: "KYC records fetched successfully",
-      data: kycRecords,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching KYC records:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
 };
 
 /* -------------------------------------------------------------------------- */
 /*                          USER/ADMIN: Get Single KYC Record                 */
 /* -------------------------------------------------------------------------- */
 const getSingleKyc = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { searchByUserId = false } = req.query;
-    let kycRecord;
+  try {
+    const { id } = req.params;
+    const { searchByUserId = false } = req.query;
+    let kycRecord;
 
-    if (req.user.role === "admin") {
-      if (searchByUserId === "true") {
-        kycRecord = await Kyc.findOne({ user_id: id }).populate(
-          "user_id",
-          "email firstName lastName"
-        );
-      } else {
-        kycRecord = await Kyc.findById(id).populate(
-          "user_id",
-          "email firstName lastName"
-        );
-      }
-    } else {
-      kycRecord = await Kyc.findOne({ user_id: req.user._id }).populate(
-        "user_id",
-        "email firstName lastName"
-      );
-    }
+    if (req.user.role === "admin") {
+      if (searchByUserId === "true") {
+        kycRecord = await Kyc.findOne({ user_id: id }).populate(
+          "user_id",
+          "email firstName lastName"
+        );
+      } else {
+        kycRecord = await Kyc.findById(id).populate(
+          "user_id",
+          "email firstName lastName"
+        );
+      }
+    } else {
+      kycRecord = await Kyc.findOne({ user_id: req.user._id }).populate(
+        "user_id",
+        "email firstName lastName"
+      );
+    }
 
-    if (!kycRecord) {
-      return res.status(404).json({ message: "KYC record not found" });
-    }
+    if (!kycRecord) {
+      return res.status(404).json({ message: "KYC record not found" });
+    }
 
-    return res.status(200).json({
-      message: "KYC record fetched successfully",
-      data: kycRecord,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching single KYC record:", error);
-    return res.status(500).json({
-      message: "Internal server error",
-      error: error.message,
-    });
-  }
+    return res.status(200).json({
+      message: "KYC record fetched successfully",
+      data: kycRecord,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching single KYC record:", error);
+    return res.status(500).json({
+      message: "Internal server error",
+      error: error.message,
+    });
+  }
 };
 
 /* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                  */
 /* -------------------------------------------------------------------------- */
 module.exports = {
-  submitKYC,
-  adminUpdateKycStatus,
-  getAllKycRecords,
-  getSingleKyc,
+  submitKYC,
+  getSingleKyc,
 };

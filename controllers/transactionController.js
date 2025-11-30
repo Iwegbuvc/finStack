@@ -46,50 +46,49 @@ const getUserTransactions = async (req, res) => {
 
 
 // ADMIN: Fetch all transactions
-const getAllTransactions = async (req, res) => {
-  try {
-    const { type, status, userId } = req.query;
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+// const getAllTransactions = async (req, res) => {
+//   try {
+//     const { type, status, userId } = req.query;
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 20;
+//     const skip = (page - 1) * limit;
 
-    // Dynamic filtering
-    const filter = {};
-    if (type) filter.type = type;
-    if (status) filter.status = status;
-    if (userId) filter.userId = userId;
+//     // Dynamic filtering
+//     const filter = {};
+//     if (type) filter.type = type;
+//     if (status) filter.status = status;
+//     if (userId) filter.userId = userId;
 
-    // Fetch and populate related info
-    const transactions = await Transaction.find(filter)
-      .populate("userId", "name email")
-      .populate("walletId", "accountNumber")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit);
+//     // Fetch and populate related info
+//     const transactions = await Transaction.find(filter)
+//       .populate("userId", "name email")
+//       .populate("walletId", "accountNumber")
+//       .sort({ createdAt: -1 })
+//       .skip(skip)
+//       .limit(limit);
 
-    // Total count for pagination metadata
-    const total = await Transaction.countDocuments(filter);
+//     // Total count for pagination metadata
+//     const total = await Transaction.countDocuments(filter);
 
-    res.status(200).json({
-      success: true,
-      message: "All transactions fetched successfully",
-      page,
-      totalPages: Math.ceil(total / limit),
-      totalTransactions: total,
-      count: transactions.length,
-      transactions,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching all transactions:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal Server Error",
-      error: error.message,
-    });
-  }
-};
+//     res.status(200).json({
+//       success: true,
+//       message: "All transactions fetched successfully",
+//       page,
+//       totalPages: Math.ceil(total / limit),
+//       totalTransactions: total,
+//       count: transactions.length,
+//       transactions,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error fetching all transactions:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal Server Error",
+//       error: error.message,
+//     });
+//   }
+// };
 
 module.exports = {
   getUserTransactions,
-  getAllTransactions,
 };

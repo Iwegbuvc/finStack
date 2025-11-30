@@ -69,27 +69,25 @@
 const mongoose = require('mongoose');
 
 const walletSchema = new mongoose.Schema({
-    // user_id no longer has a single unique constraint
-    user_id: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: 'User', 
-        required: false, 
+
+    user_id: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: false, 
         // The unique constraint is moved to a compound index below.
         sparse: true 
     },
     // New field to clearly define the purpose of the wallet for auditing and reconciliation.
-    walletType: {
-        type: String,
-        enum: ["USER", "SYSTEM", "ESCROW"],
-        default: "USER",
-        required: true
-    },
+    walletType: { type: String, enum: ["USER", "SYSTEM", "ESCROW"], default: "USER", required: true},
+
+    lastDepositReference: {  type: String,  index: true, unique: true, // IMPORTANT: Ensure uniqueness to guarantee no double-credit
+        sparse: true // Only apply the unique constraint if the field is present
+    },
+
     balance: { type: Number, default: 0 },
-    currency: { type: String, enum: ["NGN", "USD",], required: true },
-    externalWalletId: { type: String, unique: true, sparse: true }, // Blockradar wallet UUID
-    accountNumber: { type: String, unique: true, sparse: true },    // 9PSB Account Number or Blockchain address
+    currency: { type: String, enum: ["NGN", "cNGN", "USDC",], required: true },
+    externalWalletId: { type: String, sparse: true }, // Blockradar wallet UUID
+walletAddress: { type: String, sparse: true },    // Blockchain wallet address (e.g., 0x...)
+    accountNumber: { type: String, sparse: true }, 
     accountName: { type: String },
-    provider: { type: String, enum: ["9PSB", "BLOCKRADAR", "INTERNAL"] }, // Added provider field
+    provider: { type: String, enum: ["BLOCKRADAR", "INTERNAL"] }, // Added provider field
     status: { type: String, enum: ["ACTIVE", "FROZEN"], default: "ACTIVE" }
 }, { timestamps: true });
 

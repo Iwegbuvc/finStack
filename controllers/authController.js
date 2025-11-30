@@ -354,65 +354,65 @@ const resetPassword = async (req, res) => {
 };
 
 // Get all users (for admin)
-const getAllUsers = async (req, res) => {
-  try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 20;
-    const skip = (page - 1) * limit;
+// const getAllUsers = async (req, res) => {
+//   try {
+//     const page = parseInt(req.query.page) || 1;
+//     const limit = parseInt(req.query.limit) || 20;
+//     const skip = (page - 1) * limit;
 
-    const users = await User.find()
-      .select("name email phone role createdAt")
-      .skip(skip)
-      .limit(limit);
+//     const users = await User.find()
+//       .select("name email phone role createdAt")
+//       .skip(skip)
+//       .limit(limit);
 
-    const totalUsers = await User.countDocuments();
+//     const totalUsers = await User.countDocuments();
 
-    res.status(200).json({
-      success: true,
-      message: "Users fetched successfully",
-      page,
-      totalPages: Math.ceil(totalUsers / limit),
-      totalUsers,
-      users,
-    });
-  } catch (error) {
-    console.error("❌ Error fetching users:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error",
-    });
-  }
-};
+//     res.status(200).json({
+//       success: true,
+//       message: "Users fetched successfully",
+//       page,
+//       totalPages: Math.ceil(totalUsers / limit),
+//       totalUsers,
+//       users,
+//     });
+//   } catch (error) {
+//     console.error("❌ Error fetching users:", error);
+//     res.status(500).json({
+//       success: false,
+//       message: "Internal server error",
+//     });
+//   }
+// };
 
 // Update User Role (for admin) 
-const updateUserRole = async (req, res) => {
-  try {
-    const { userId, role } = req.body;
+// const updateUserRole = async (req, res) => {
+//   try {
+//     const { userId, role } = req.body;
 
-    // Validate input
-    if (!userId || !role) {
-      return res.status(400).json({ message: "User ID and role are required" });
-    }
+//     // Validate input
+//     if (!userId || !role) {
+//       return res.status(400).json({ message: "User ID and role are required" });
+//     }
 
     
-    if (!["user", "merchant", "admin"].includes(role)) {
-      return res.status(400).json({ message: "Invalid role" });
-    }
+//     if (!["user", "merchant", "admin"].includes(role)) {
+//       return res.status(400).json({ message: "Invalid role" });
+//     }
 
-    // Find user and update role
-    const updatedUser = await User.findByIdAndUpdate(userId, { role }, { new: true });
-    if (!updatedUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
+//     // Find user and update role
+//     const updatedUser = await User.findByIdAndUpdate(userId, { role }, { new: true });
+//     if (!updatedUser) {
+//       return res.status(404).json({ message: "User not found" });
+//     }
 
-    res.status(200).json({
-      message: "User role updated successfully",
-      user: updatedUser,
-    });
-  } catch (error) {
-     res.status(500).json({ message: error.message });
-  }
-}
+//     res.status(200).json({
+//       message: "User role updated successfully",
+//       user: updatedUser,
+//     });
+//   } catch (error) {
+//      res.status(500).json({ message: error.message });
+//   }
+// }
 
 // Logout User
 const logoutUser = async (req, res) => {
@@ -465,4 +465,4 @@ const logoutUser = async (req, res) => {
     }
 };
 
-module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, handleRefreshToken, forgotPassword, resetPassword, getAllUsers, updateUserRole, logoutUser};
+module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, handleRefreshToken, forgotPassword, resetPassword, logoutUser};

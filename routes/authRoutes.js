@@ -12,8 +12,8 @@ router.post("/login", validateLogin, authController.loginUser)
 router.post("/refresh-token", authController.handleRefreshToken)
 router.post("/forgot-password", authController.forgotPassword)
 router.post("/reset-password", validatePassword, authController.resetPassword)
-router.put("/update-user-role", verifyToken, isAdmin, authController.updateUserRole);
-router.get("/admin/users", verifyToken, isAdmin, authController.getAllUsers);
+// router.put("/update-user-role", verifyToken, isAdmin, authController.updateUserRole);
+// router.get("/admin/users", verifyToken, isAdmin, authController.getAllUsers);
 router.post("/logout", authController.logoutUser);
 
 

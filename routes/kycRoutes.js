@@ -21,20 +21,20 @@ router.post(
 );
 
 // admin updates KYC status
-router.put(
-  "/admin/updateKyc",
-  verifyToken,
-  isAdmin,
-  kycController.adminUpdateKycStatus
-);
+// router.put(
+//   "/admin/updateKyc",
+//   verifyToken,
+//   isAdmin,
+//   kycController.adminUpdateKycStatus
+// );
 
 // admin gets all records
-router.get(
-  "/admin/getAllKycs",
-  verifyToken,
-  isAdmin,
-  kycController.getAllKycRecords
-);
+// router.get(
+//   "/admin/getAllKycs",
+//   verifyToken,
+//   isAdmin,
+//   kycController.getAllKycRecords
+// );
 
 // get single KYC record
 // - ADMIN: can fetch any user's KYC

@@ -21,74 +21,158 @@ const headers = {
 // -----------------------------
 // 🧩 Utility: Centralized Error Logger
 // -----------------------------
-function logBlockraderError(context, error) {
-  if (error.response) {
-    // Attempt to log specific message from the response data if available
-    const apiMessage = error.response.data?.message;
-    console.error(
-      `[Blockrader] ${context} failed with status ${error.response.status}:`,
-      apiMessage || error.response.data
-    );
-  } else if (error.request) {
-    console.error(`[Blockrader] ${context} failed: No response from server`, error.request);
-  } else {
-    console.error(`[Blockrader] ${context} error:`, error.message);
-  }
+function logBlockraderError(context, error) { 
+	if (error.response) { 
+		// Attempt to log specific message from the response data if available
+		const apiMessage = error.response.data?.message; 
+		console.error( 
+			`[Blockrader] ${context} failed with status: ${error.response.status}. API Message: ${apiMessage || 'No specific message'}`
+		);
+	} else {
+		console.error(`[Blockrader] ${context} failed:`, error.message);
+	}
 }
 
 // -----------------------------
-// 💰 Create USD Wallet Address (Under Master Wallet)
+// 💰 NEW HELPER: Create Wallet DB Record
 // -----------------------------
 /**
- * Creates a new user address (account) nested under the Master Company Wallet.
- * @param {string} userId - MongoDB User _id
- * @param {string} email - User's email
- * @param {string} name - User full name
- * @returns {Promise<Object>} Newly created wallet object (MongoDB)
- */
-async function createUsdWallet({ userId, email, name, currency = "USD" }) {
-  try {
+ * Creates a single Wallet record in the local database.
+ * This is a helper, used by the controller to create multiple records 
+ * (USDC, cNGN, NGN) all linked to the same Blockrader Address ID.
+ * @param {object} params
+ * @param {object} session - Mongoose session for transaction integrity.
+ */
+async function createWalletRecord({ userId, currency, externalWalletId, accountNumber, accountName, session, walletAddress}) {
+    const newWallet = new Wallet({
+        user_id: userId,
+        currency,
+        externalWalletId: externalWalletId, // Blockrader Address ID (UUID)
+        walletAddress: walletAddress,
+        account_number: accountNumber,      // Crypto Address (0x...) or Bank Account Number (900...)
+        account_name: accountName,
+        provider: "BLOCKRADAR", 
+        status: "ACTIVE",
+    });
+
+    // Pass the session for transactional integrity
+    await newWallet.save({ session });
+    return newWallet;
+}
+
+// -----------------------------
+// 🚀 REFACTORED: CREATE BLOCKRADER ADDRESS (Replaces createUsdWallet)
+// -----------------------------
+/**
+ * CRITICAL: Creates a new unique CRYPTO ADDRESS under the Master Wallet.
+ * This Address is the single destination for ALL stablecoins (USDC, cNGN, etc.)
+ * @param {object} params
+ * @returns {object} { externalWalletId, cryptoAddress, accountName }
+ */
+async function createStablecoinAddress({ userId, email, name }) {
+    try {
+        if (!BLOCKRADER_MASTER_WALLET_UUID) {
+            throw new Error("FATAL: Master Wallet UUID (COMPANY_ESCROW_ACCOUNT_ID) is missing or undefined.");
+        }
+
+        const response = await axios.post(
+            `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses`,
+            {
+                disableAutoSweep: true,
+                metadata: { userId, email },
+                name: `${name}'s Escrow Address`,
+            },
+            { headers }
+        );
+
+        // ✅ CRITICAL FIX: Extract the actual data payload from the nested 'data' field
+        const responseData = response.data.data; 
+
+        if (!responseData || !responseData.id || !responseData.address) {
+            throw new Error("Invalid response from Blockrader API: Missing address ID or crypto address in data payload.");
+        }
+
+        console.log(`[Blockrader] New Address created under Master Wallet for ${email}. ID: ${responseData.id}`);
+        
+        // 💡 CHANGE: DO NOT create a Wallet record here. Just return the Blockrader address details.
+        return { 
+            externalWalletId: responseData.id,      // Blockrader Address ID (UUID)
+            cryptoAddress: responseData.address,    // The Crypto Address (0x...)
+            accountName: `${name}'s Escrow Address`
+        };
+
+    } catch (error) {
+        logBlockraderError("Create Stablecoin Address", error);
+        throw new Error(`Unable to create user address on Blockrader: ${error.message}`);
+    }
+}
+// -----------------------------
+// 🏦 CREATE VIRTUAL ACCOUNT (linked to Child Address)
+// -----------------------------
+// The following function remains unchanged from your original design, 
+// but is included here for completeness of the file.
+/**
+ * Creates a Virtual Account linked to a specific Child Address ID.
+ * This is the critical change to ensure cNGN goes to the user's wallet.
+ *
+ * @param {string} childAddressId - The UUID of the user's dedicated Address (from createStablecoinAddress).
+ * @param {object} kycData - Verified user data (firstName, lastName, email, phoneNo)
+ * @returns {object} { accountName, accountNumber, bankName, customerId, platformWalletId }
+ */
+async function createVirtualAccountForChildAddress(childAddressId, kycData) {
+    const context = "Create Virtual Account (cNGN Deposit) for Child Address";
+    
     if (!BLOCKRADER_MASTER_WALLET_UUID) {
         throw new Error("FATAL: Master Wallet UUID (COMPANY_ESCROW_ACCOUNT_ID) is missing or undefined.");
     }
-
-    // CRITICAL: We create a new ADDRESS under the MASTER WALLET, not a new top-level wallet.
-    const response = await axios.post(
-      `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses`,
-      {
-        disableAutoSweep: true,
-        metadata: { userId, email },
-        name: `${name}'s Escrow Address`,
-      },
-      { headers }
-    );
-
-    const data = response.data;
-    if (!data.id || !data.address) {
-      throw new Error("Invalid response from Blockrader API: Missing address ID or crypto address.");
+    if (!childAddressId) {
+        throw new Error("CRITICAL: Child Address ID is missing for Virtual Account creation.");
+    }
+    
+    // Ensure phone number is in the required format: +234XXXXXXXXXX
+    let phoneInFormat = kycData.phoneNo;
+    if (phoneInFormat && !phoneInFormat.startsWith('+')) {
+        phoneInFormat = `+234${phoneInFormat.startsWith('0') ? phoneInFormat.substring(1) : phoneInFormat}`;
     }
 
-    // The 'externalWalletId' stored in MongoDB is the Address ID (UUID)
-    const newWallet = new Wallet({
-      user_id: userId,
-      currency,
-      externalWalletId: data.id, // This is the Address ID (UUID)
-      account_number: data.address, // This is the Crypto Address (0x...)
-      account_name: `${name}'s Escrow Address`,
-      provider: "blockrader",
-      status: "ACTIVE",
-    });
+    const payload = {
+        firstname: kycData.firstName,
+        lastName: kycData.lastName,
+        email: kycData.email,
+        phone: phoneInFormat, 
+        // type: "AUTO_FUNDING" is the default.
+    };
+    
+    // 🚀 CRITICAL ENDPOINT CHANGE 🚀
+    // Endpoint: POST /wallets/{masterWalletId}/addresses/{childAddressId}/virtual-accounts
+    const url = `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses/${childAddressId}/virtual-accounts`;
 
-    await newWallet.save();
-    console.log(`[Blockrader] New Address created under Master Wallet for ${email}. ID: ${data.id}`);
-    return newWallet;
+    try {
+        console.log(`[Blockrader] Attempting to create Virtual Account for ${kycData.email} linked to Address ID: ${childAddressId}`);
 
-  } catch (error) {
-    logBlockraderError("Create USD Wallet Address", error);
-    throw new Error(`Unable to create user address on Blockrader: ${error.message}`);
-  }
+        const response = await axios.post(url, payload, { headers });
+        
+        if (response.data.statusCode !== 201 || response.data.status === 'error') {
+            throw new Error(response.data.message || "Blockrader Virtual Account creation failed with unknown error.");
+        }
+        
+        const data = response.data.data;
+        
+        console.log(`[Blockrader] Virtual Account created successfully. Account Number: ${data.accountNumber}`);
+
+        // Return the essential details
+        return {
+            accountName: data.accountName,
+            accountNumber: data.accountNumber, // The virtual account number for deposits
+            bankName: data.bankName,
+            customerId: data.customer.id,
+            platformWalletId: data.wallet.id, // This should be the Child Address ID
+        };
+    } catch (error) {
+        logBlockraderError(context, error);
+        throw new Error("Failed to create user's cNGN deposit account: " + (error.response?.data?.message || error.message));
+    }
 }
-
 // -----------------------------
 // 🧾 Get User Address ID (Now returns the Address UUID)
 // -----------------------------
@@ -237,8 +321,6 @@ async function transferFunds(sourceAddressId, destinationAddressId, amount, curr
         throw new Error("Unsupported P2P transfer flow: Transfer must involve the Master Escrow Wallet.");
     }
 }
-
-
 // -----------------------------
 // 🏦 Create Deposit Address (Now redundant, as createUsdWallet does this)
 // -----------------------------
@@ -295,7 +377,9 @@ async function withdrawFromBlockrader(sourceAddressId, toCryptoAddress, amount, 
 }
 
 module.exports = {
-    createUsdWallet,
+    createWalletRecord,
+    createStablecoinAddress,
+    createVirtualAccountForChildAddress,
     getUserAddressId,    
     fundChildWallet, // Keep for Master -> Child compatibility/clarity
     transferFunds, // ✅ NOW EXPORTED: The new routing wrapper for P2P service
