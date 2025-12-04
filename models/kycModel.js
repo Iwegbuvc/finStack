@@ -72,7 +72,6 @@
 //   };
 // };
 
-// module.exports = mongoose.model("Kyc", kycSchema);
 const mongoose = require("mongoose");
 const { encrypt, decrypt } = require("../utilities/encryptionUtils");
 
@@ -126,34 +125,6 @@ kycSchema.methods.getDecryptedNIN = function () {
 kycSchema.methods.getDecryptedNINUserId = function () {
   return this.nin_user_id ? decrypt(this.nin_user_id) : null;
 };
-
-// 🧩 Static method – builds full decrypted payload for 9PSB API (small issues)
-// kycSchema.statics.getVerifiedDataFor9PSB = async function (userId) {
-//   // CRITICAL FIX: Ensure we only pull a record that is APPROVED.
-//   const record = await this.findOne({ 
-//     user_id: userId,
-//     status: "APPROVED" // Added explicit status check
-//   }).populate("user_id", "email firstName lastName");
-  
-//   if (!record) throw new Error("KYC record not found or is not APPROVED."); // Improved error message
-
-//   return {
-//     firstname: record.firstname,
-//     lastname: record.lastname,
-//     gender: record.gender === "MALE" ? 0 : 1, // 9PSB uses 0=Male, 1=Female
-//     dateOfBirth: record.dob,
-//     phoneNo: record.phone_number,
-//     address: record.address,
-//     email: record.user_id.email,
-//     bvn: record.getDecryptedBVN(),
-//     nin: record.getDecryptedNIN(),
-//     ninUserId: record.getDecryptedNINUserId(),
-//     country: record.country,
-//   };
-// };
-
-// module.exports = mongoose.model("Kyc", kycSchema);
-// ... (kycSchema.methods.getDecryptedNINUserId function)
 
 // 🧩 Static method – builds full decrypted payload for 9PSB API
 // 🚨 FIX: Added `session` as a parameter and used it in findOne.

@@ -3,13 +3,14 @@ const kycController = require("../controllers/kycController");
 const { validateKYC } = require("../middlewares/validation");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
 const { upload, uploadErrorHandler } = require("../utilities/fileUpload");
-const { kycRateLimit } = require("../middlewares/rateLimit");
+const { kycRateLimit } = require("../middlewares/rateLimiter");
 
 const router = express.Router();
 
 router.post(
   "/submitKyc",
   verifyToken, // ensures req.user is populated
+  kycRateLimit, // custom DB-backed rate limiter
   upload.fields([
     { name: "selfie", maxCount: 1 },
     { name: "proof_id_front", maxCount: 1 },

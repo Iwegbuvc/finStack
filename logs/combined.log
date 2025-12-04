@@ -155,3 +155,12 @@
 {"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068810: 49940","timestamp":"2025-11-08 16:13:45"}
 {"level":"info","message":"Pre-Deposit 9PSB Balance for 1100068810: 49940","timestamp":"2025-11-08 16:16:51"}
 {"level":"info","message":"Post-Deposit EXTERNAL 9PSB Balance for 1100068810: 50930","timestamp":"2025-11-08 16:16:55"}
+{"level":"error","message":"❌ OTP Generation/Sending Error for P2P_SETTLEMENT: Request failed with status code 401","timestamp":"2025-12-03 03:40:02"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 03:58:57"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 04:07:41"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 04:28:28"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 04:37:19"}
+{"level":"error","message":"❌ OTP Generation/Sending Error for P2P_SETTLEMENT: Request failed with status code 401","timestamp":"2025-12-03 14:19:08"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 14:22:59"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-03 15:55:04"}
+{"level":"info","message":"📧 OTP Sent via Brevo to iwegbuvictor020@gmail.com for action: P2P_SETTLEMENT","timestamp":"2025-12-04 00:48:44"}

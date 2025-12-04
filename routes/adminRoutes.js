@@ -28,11 +28,11 @@ router.get("/getSingleKyc/:id", verifyToken, getSingleKyc);
 // 5. FIX: Now uses the imported function getAllKycRecords directly
 router.get("/admin/getAllKycs", verifyToken, isAdmin, getAllKycRecords);
 
-// Admin trade management (These were already correct)
+// Admin trade management 
 router.get("/admin/trades", isAdmin, getAllTrades);
 router.get("/admin/trades/:reference", isAdmin, getTradeDetails);
 
-// Admin only routes (This was already correct)
+// Admin only routes for transactions
 router.get("/admin/all-transaction", verifyToken, isAdmin, getAllTransactions);
 
 module.exports = router;

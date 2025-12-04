@@ -4,18 +4,9 @@ const User = require("../models/userModel");
 const Kyc = require("../models/kycModel");
 const Wallet = require("../models/walletModel");
 const Transaction = require("../models/transactionModel");
-// const { createUsdWallet, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
 const { createStablecoinAddress, createWalletRecord, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
-const { verifyBVN, verifyNIN } = require("../services/prembly");
-const { decrypt } = require("../utilities/encryptionUtils");
 
-// 🚨 CRITICAL FIX 2: Placeholder function to prevent ReferenceError
-const generateNinUserIdFallback = () => {
-    // Implement your actual logic for generating a fallback ID here
-    return `NIN_FALLBACK_${Date.now()}`;
-};
-
-
+/* ===========  ADMIN: Get All Users   =========== */
 const getAllUsers = async (req, res) => {
     try {
         const page = parseInt(req.query.page) || 1;
@@ -77,54 +68,76 @@ const updateUserRole = async (req, res) => {
 }
 
 // --------------------- Admin Updates KYC ---------------------
-
 const adminUpdateKycStatus = async (req, res) => {
-    const { kycId, status, rejectionReason } = req.body;
-    
-    // CRITICAL: Start a session for transactional integrity
+
+    const { id: kycId, status, rejectionReason } = req.body; 
+
+    console.log(`[KYC Update] Received status: ${status}, for kycId: ${kycId}`);
+
+    if (!kycId || !mongoose.Types.ObjectId.isValid(kycId)) {
+         return res.status(400).json({
+            success: false,
+            message: "Invalid or missing KYC ID.",
+        });
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-        // Must populate user_id to get email and ID for wallet creation
-        const kycRecord = await Kyc.findById(kycId).populate('user_id', 'email').session(session);
-
-        if (!kycRecord) {
-            throw new Error("KYC record not found.");
-        }
+        // Load KYC
+        const kycRecord = await Kyc.findById(kycId)
+            .populate('user_id', 'email')
+            .session(session);
         
+        // This is the line throwing the error if kycId is invalid or record is deleted
+        if (!kycRecord) {
+             console.error(`❌ KYC Lookup Failed: Record not found for kycId: ${kycId}`);
+             throw new Error("KYC record not found.");
+        }    
+        // ==========================  APPROVAL  ===============================
         if (status === "APPROVED") {
-            // ----------------------------------------------------------------------
-            // 🚀 STEP 1: CREATE DEDICATED CHILD ADDRESS (The single Blockrader destination)
-            const { externalWalletId, cryptoAddress, accountName } = await createStablecoinAddress({ 
-                userId: kycRecord.user_id._id,
-                email: kycRecord.user_id.email,
-                name: `${kycRecord.firstname} ${kycRecord.lastname}`,
-            });
+            // 1. CREATE BLOCKRADER CHILD ADDRESS (Universal Wallet)
+
+            const { externalWalletId, cryptoAddress, accountName } =
+                await createStablecoinAddress({
+                    userId: kycRecord.user_id._id,
+                    email: kycRecord.user_id.email,
+                    name: `${kycRecord.firstname} ${kycRecord.lastname}`,
+                });
+
             const childAddressId = externalWalletId;
-            console.log("✅ Step 1 Complete: Stablecoin Address provisioned.");
+            console.log("✅ Step 1 Complete: Stablecoin Child Address created.");
 
-            // ----------------------------------------------------------------------
-            // 🚀 STEP 2: CREATE MULTIPLE DB WALLET RECORDS (The separate balances)
+            // 2A. ALWAYS CREATE USDC WALLET (FOR ALL USERS)
 
-            // 2a. CREATE WALLET RECORD FOR USDC (Always necessary for crypto users)
-            const usdcWalletDB = await createWalletRecord({
+            await createWalletRecord({
                 userId: kycRecord.user_id._id,
-                currency: "USDC", // <-- CURRENCY FOR DISPLAY
+                currency: "USDC",
                 externalWalletId: childAddressId,
-                walletAddress: cryptoAddress, // The 0x... address 
+                walletAddress: cryptoAddress,
                 accountName: `${accountName} - USDC`,
-                session, // <-- PASS THE SESSION
+                session,
             });
-            console.log(`✅ Step 2a Complete: USDC Wallet DB record created.`);
+            console.log("✅ Step 2a Complete: USDC Wallet record created.");
 
-            // ----------------------------------------------------------------------
-            // 🚀 CONDITIONAL LOGIC FOR NIGERIAN USERS (cNGN / Fiat Rail)
-            const isNigerian = kycRecord.country && kycRecord.country.toLowerCase() === "nigeria";
-            
+            // 2B. ALWAYS CREATE cNGN WALLET (FOR ALL USERS)
+            await createWalletRecord({
+                userId: kycRecord.user_id._id,
+                currency: "cNGN",
+                externalWalletId: childAddressId,
+                walletAddress: cryptoAddress,
+                accountName: `${accountName} - cNGN`,
+                session,
+            });
+            console.log("✅ Step 2b Complete: cNGN Wallet record created.");
+            // 3. ONLY NIGERIAN USERS GET NGN VIRTUAL ACCOUNT
+            const isNigerian =
+                kycRecord.country &&
+                kycRecord.country.toLowerCase() === "nigeria";
+
             if (isNigerian) {
-                console.log("✅ Detected Nigerian User. Proceeding with NGN/cNGN wallet setup...");
-
+                console.log("🇳🇬 Nigerian User Detected → Creating NGN Virtual Account");
                 const kycData = {
                     firstName: kycRecord.firstname,
                     lastName: kycRecord.lastname,
@@ -132,107 +145,87 @@ const adminUpdateKycStatus = async (req, res) => {
                     phoneNo: kycRecord.phone_number,
                 };
 
-                // 2b. CREATE WALLET RECORD FOR CNGN (Link to the same crypto address)
-                const cngnWalletDB = await createWalletRecord({
-                    userId: kycRecord.user_id._id,
-                    currency: "cNGN", 
-                    externalWalletId: childAddressId,
-                    walletAddress: cryptoAddress, // The 0x... address (same as USDC)
-                    accountName: `${accountName} - cNGN`,
-                    session, 
-                });
-                console.log(`✅ Step 2b Complete: CNGN Wallet DB record created.`);
+                const virtualAccountDetails =
+                    await createVirtualAccountForChildAddress(
+                        childAddressId,
+                        kycData
+                    );
 
-                // ----------------------------------------------------------------------
-                // 🚀 STEP 3: CREATE VIRTUAL ACCOUNT (Fiat Rail)
-                const virtualAccountDetails = await createVirtualAccountForChildAddress(
-                    childAddressId, // <-- Uses the single Address ID
-                    kycData
-                );
-                console.log("✅ Step 3 Complete: Virtual Account created on Blockrader.");
-
-                // ----------------------------------------------------------------------
-                // 🚀 STEP 4: CREATE DATABASE WALLET RECORD FOR FIAT DEPOSIT MECHANISM (NGN)
+                console.log("✅ Step 3 Complete: Virtual NGN Account created.");
+                
+                // 4. CREATE NGN WALLET RECORD (FIAT ACCOUNT)
                 await createWalletRecord({
                     userId: kycRecord.user_id._id,
-                    currency: "NGN", // <-- FIAT CURRENCY
-                    accountNumber: virtualAccountDetails.accountNumber, // Bank Account Number (900...)
+                    currency: "NGN",
+                    accountNumber: virtualAccountDetails.accountNumber,
                     accountName: virtualAccountDetails.accountName,
-                    session, 
+                    session,
                 });
-                console.log(`✅ Step 4 Complete: NGN Virtual Account DB record created.`);
 
+                console.log("✅ Step 4 Complete: NGN Wallet DB record created.");
             } else {
-                console.log(`⚠️ Detected Non-Nigerian User (Country: ${kycRecord.country}). Skipping NGN/cNGN wallet and Virtual Account creation.`);
+                console.log(
+                    `Non-Nigerian User (${kycRecord.country}) → NGN wallet skipped.`
+                );
             }
 
-            // ----------------------------------------------------------------------
-            // 🚀 STEP 5: FINAL KYC UPDATE AND COMMIT
+            // 5. FINALIZE KYC STATUS
             kycRecord.status = "APPROVED";
-            // Set kycVerified on the user model if necessary here
-            // await User.findByIdAndUpdate(kycRecord.user_id._id, { kycVerified: true }, { session });
             await kycRecord.save({ session });
-            
+             await User.findByIdAndUpdate(
+                 kycRecord.user_id._id,
+                 { kycVerified: true },
+                 { session }
+             );
+             console.log(`✅ Step 5B Complete: User ${kycRecord.user_id._id} set to kycVerified: true.`);
+
             await session.commitTransaction();
 
             return res.status(200).json({
                 success: true,
-                message: "KYC approved and wallets provisioned successfully.",
-                data: kycRecord
+                message: "KYC approved. Wallets provisioned successfully.",
+                data: kycRecord,
             });
-            
-        } else if (status === "REJECTED") {
-           // 1. Validation check for rejection reason
-            if (!rejectionReason || rejectionReason.trim().length === 0) {
-                // This is a business-logic error, so throw a descriptive error
-                throw new Error("A rejectionReason is required when status is REJECTED.");
+        }
+        // ==========================  REJECTION  ===============================
+        if (status === "REJECTED") {
+            if (!rejectionReason || !rejectionReason.trim()) {
+                throw new Error("rejectionReason is required when rejecting KYC.");
             }
-
-            // 2. Update KYC record status and reason
             kycRecord.status = "REJECTED";
             kycRecord.rejectionReason = rejectionReason;
             await kycRecord.save({ session });
-
-            // 3. Update User model's kycVerified status
-            // Crucially, set the user's kycVerified flag to false upon rejection
             await User.findByIdAndUpdate(
                 kycRecord.user_id._id,
-                { kycVerified: false }, 
+                { kycVerified: false },
                 { session }
             );
-
-            console.log(`❌ KYC Rejected: Status and reason updated for ${kycRecord.user_id.email}`);
-
-            // 4. Commit transaction
             await session.commitTransaction();
-            
-            // 5. Send response
+
             return res.status(200).json({
                 success: true,
-                message: "KYC rejected and status updated successfully.",
-                data: kycRecord
+                message: "KYC rejected and updated.",
+                data: kycRecord,
             });
-
-        } else {
-            throw new Error("Invalid status provided in the request body. Must be APPROVED or REJECTED.");
         }
+
+        throw new Error("Invalid status: must be APPROVED or REJECTED.");
+
     } catch (error) {
-        // Rollback transaction on any failure to maintain database integrity
         await session.abortTransaction();
-        console.error("KYC Approval/Update failed. Transaction rolled back:", error);
+        console.error("❌ KYC Update Failed:", error);
 
         return res.status(500).json({
             success: false,
-            message: `Failed to update KYC status or provision wallets: ${error.message}`,
-            details: error.message
+            message: "Failed to process KYC update",
+            error: error.message,
         });
     } finally {
         session.endSession();
     }
 };
-/* -------------------------------------------------------------------------- */
-/*                            ADMIN: Get All KYC Records                      */
-/* -------------------------------------------------------------------------- */
+
+/* ===========  ADMIN: Get All KYC Records   =========== */
 const getAllKycRecords = async (req, res) => {
     try {
         const kycRecords = await Kyc.find().populate(
@@ -252,9 +245,7 @@ const getAllKycRecords = async (req, res) => {
     }
 };
 
-/* -------------------------------------------------------------------------- */
-/*                          USER/ADMIN: Get Single KYC Record                 */
-/* -------------------------------------------------------------------------- */
+/* ==========   USER/ADMIN: Get Single KYC Record  ==========  */
 const getSingleKyc = async (req, res) => {
     try {
         const { id } = req.params;
@@ -297,7 +288,7 @@ const getSingleKyc = async (req, res) => {
     }
 };
 
-// ADMIN: Fetch all transactions
+// =========== ADMIN: Fetch all transactions
 const getAllTransactions = async (req, res) => {
     try {
         const { type, status, userId } = req.query;

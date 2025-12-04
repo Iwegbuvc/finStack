@@ -15,7 +15,7 @@ const p2pRoutes = require ("./routes/p2pRoute");
 const merchantRoutes = require ("./routes/merchantRoutes");
 
 const app = express();
-
+app.set('trust proxy', 1);
 const allowedOrigins = ["https://finstack-vert.vercel.app", "http://localhost:3000"]
 
 app.use(helmet());
@@ -55,8 +55,8 @@ app.use("/api", transactionRoutes)
 app.use("/api", transferRoutes)
 app.use("/api", p2pRoutes)
 app.use("/api", merchantRoutes)
-// app.use("/api/webhooks", webhookRoutes)
-app.use("/", webhookRoutes)
+app.use("/api", webhookRoutes)
+// app.use("/", webhookRoutes)
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, ()=>{
