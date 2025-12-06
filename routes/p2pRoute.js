@@ -15,7 +15,9 @@ const p2pController = require("../controllers/p2pController");
 const { verifyToken } = require("../middlewares/validateToken"); 
 const { transactionLimiter } = require("../middlewares/rateLimiter")
 
-router.post("/trade/initiate", verifyToken, transactionLimiter, p2pController.createTrade);
+// router.post("/trade/initiate", verifyToken, transactionLimiter, p2pController.createTrade);
+router.post("/trade/initiate/:adId", verifyToken, transactionLimiter, p2pController.createTrade);
+
 router.post("/trade/:reference/confirm-buyer-payment", verifyToken,transactionLimiter, p2pController.buyerConfirmPayment);
 
 // ⬅️ CRITICAL FIX: ADD THIS ROUTE FOR OTP INITIATION

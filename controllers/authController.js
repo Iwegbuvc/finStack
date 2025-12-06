@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
+const BlacklistedToken = require('../models/blackListTokenModel');
 const { generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail } = require('../utilities/mailGenerator');
 const sendMail = require('../utilities/sendMail');
 
@@ -55,7 +56,6 @@ const registerUser = async (req, res) => {
     res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
-
 // Verify Email
 const verifyEmail = async (req, res) => {
   const { verificationCode } = req.params;
@@ -173,7 +173,6 @@ const loginUser = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // Refresh Token Handler with Rotation
 const handleRefreshToken = async (req, res) => {
     // 1. Check for Refresh Token in Cookies
@@ -262,8 +261,6 @@ const handleRefreshToken = async (req, res) => {
         return res.status(500).json({ message: 'Internal Server Error' });
     }
 };
-
-
 // forgot password
 const forgotPassword = async (req, res) => {
   const { email } = req.body;
@@ -300,7 +297,6 @@ const forgotPassword = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
 // Reset Password
 const resetPassword = async (req, res) => {
   const { resetToken, password } = req.body;
@@ -352,117 +348,58 @@ const resetPassword = async (req, res) => {
     return res.status(500).json({ message: "Internal server error" });
   }
 };
-
-// Get all users (for admin)
-// const getAllUsers = async (req, res) => {
-//   try {
-//     const page = parseInt(req.query.page) || 1;
-//     const limit = parseInt(req.query.limit) || 20;
-//     const skip = (page - 1) * limit;
-
-//     const users = await User.find()
-//       .select("name email phone role createdAt")
-//       .skip(skip)
-//       .limit(limit);
-
-//     const totalUsers = await User.countDocuments();
-
-//     res.status(200).json({
-//       success: true,
-//       message: "Users fetched successfully",
-//       page,
-//       totalPages: Math.ceil(totalUsers / limit),
-//       totalUsers,
-//       users,
-//     });
-//   } catch (error) {
-//     console.error("❌ Error fetching users:", error);
-//     res.status(500).json({
-//       success: false,
-//       message: "Internal server error",
-//     });
-//   }
-// };
-
-// Update User Role (for admin) 
-// const updateUserRole = async (req, res) => {
-//   try {
-//     const { userId, role } = req.body;
-
-//     // Validate input
-//     if (!userId || !role) {
-//       return res.status(400).json({ message: "User ID and role are required" });
-//     }
-
-    
-//     if (!["user", "merchant", "admin"].includes(role)) {
-//       return res.status(400).json({ message: "Invalid role" });
-//     }
-
-//     // Find user and update role
-//     const updatedUser = await User.findByIdAndUpdate(userId, { role }, { new: true });
-//     if (!updatedUser) {
-//       return res.status(404).json({ message: "User not found" });
-//     }
-
-//     res.status(200).json({
-//       message: "User role updated successfully",
-//       user: updatedUser,
-//     });
-//   } catch (error) {
-//      res.status(500).json({ message: error.message });
-//   }
-// }
-
 // Logout User
 const logoutUser = async (req, res) => {
-    // 1. Check for Refresh Token in Cookies
-    const cookies = req.cookies;
-    if (!cookies?.refreshToken) {
-        // Clear cookie just in case (e.g., if token was removed from DB but cookie remained)
-        res.clearCookie('refreshToken', { 
-            httpOnly: true, 
-            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
-            sameSite: 'strict' 
-        });
-        return res.status(204).json({ message: 'No Content (Already logged out)' }); // 204 No Content is standard for successful logout
-    }
+    const cookies = req.cookies;
+    
+    // 1. Access Token Blacklisting (Revokes AT instantly)
+    const authHeader = req.headers.authorization || "";
+    const accessToken = authHeader.startsWith("Bearer ")
+        ? authHeader.split(" ")[1]
+        : null;
 
-    const refreshToken = cookies.refreshToken;
-
-    try {
-        // 2. Find user who has this token and remove it from DB
-        const foundUser = await User.findOne({ refreshToken: refreshToken });
-
-        if (foundUser) {
-            // Remove the token from the user's array
-            foundUser.refreshToken = foundUser.refreshToken.filter(
-                (token) => token !== refreshToken
-            );
-            await foundUser.save();
-        }
-        
-        // 3. Clear the cookie on the client side
-        res.clearCookie('refreshToken', { 
-            httpOnly: true, 
-            // IMPORTANT: Use the same settings (secure, sameSite) used when the cookie was set
-            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
-            sameSite: 'strict' 
-        });
-
-        // Send successful response
-        return res.status(204).send(); // Send 204 No Content for success
-        
-    } catch (error) {
-        console.error('Logout Error:', error);
-        // Even if DB fails, clear the cookie and inform the user
-        res.clearCookie('refreshToken', { 
-            httpOnly: true, 
-            secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
-            sameSite: 'strict' 
-        });
-        return res.status(204).send();
-    }
+    if (accessToken) {
+        try {
+            // Decode the token (no signature check needed, only expiration time)
+            const decoded = jwt.decode(accessToken);
+            
+            if (decoded && decoded.exp) {
+                // Blacklist the token until its natural expiration
+                await BlacklistedToken.create({
+                    token: accessToken,
+                    // Convert JWT expiration (seconds) to JavaScript Date (milliseconds)
+                    expiresAt: new Date(decoded.exp * 1000), 
+                });
+            }
+        } catch (err) {
+            console.error("Access Token Blacklist Error:", err);
+            // Continue with RT cleanup even if AT blacklisting fails
+        }
+    }
+    // 2. Refresh Token Cleanup (Revokes RT from DB and client)
+    if (cookies?.refreshToken) {
+        const refreshToken = cookies.refreshToken;
+        
+        try {
+            // Remove the token from the user's document in the DB
+            await User.updateOne(
+                { refreshToken: refreshToken }, // Find user by token
+                { $pull: { refreshToken: refreshToken } } // Remove the token
+            );
+        } catch (error) {
+            console.error('Refresh Token DB Cleanup Error:', error);
+            // Even if DB fails, proceed to clear the cookie
+        }
+    }
+    // 3. Clear the Refresh Token Cookie on the client side (REQUIRED)
+    res.clearCookie('refreshToken', { 
+        httpOnly: true, 
+        // IMPORTANT: Use the same settings used when the cookie was set
+        secure: process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging', 
+        sameSite: 'strict' 
+    });
+    // 4. Send successful response
+    return res.status(204).send(); // Standard practice for a successful logout/delete operation
 };
 
 module.exports = {registerUser, verifyEmail, resendVerificationCode, loginUser, handleRefreshToken, forgotPassword, resetPassword, logoutUser};

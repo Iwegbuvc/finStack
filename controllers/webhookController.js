@@ -12,45 +12,6 @@
   } = require("../services/transactionHandlers");
 
 
-  // 🟩 9PSB webhook: handles NGN wallet events (Keeping original logic for completeness)
-  const ninePSBWebhook = async (req, res) => {
-    try {
-      const data = req.body;
-      console.log("📩 9PSB webhook received:", data);
-
-      // Step 1: Update the matching transaction using `reference`
-      const updatedTx = await Transaction.findOneAndUpdate(
-        { reference: data.reference },
-        { status: data.status },
-        { new: true }
-      );
-
-      if (!updatedTx) {
-        console.log("⚠️ Transaction not found for reference:", data.reference);
-        return res.status(200).send("Transaction not found (processed successfully)"); 
-      }
-
-      // Step 2: If transaction was successful, update user's wallet balance
-      if (data.status === "SUCCESS") {
-        const updatedWallet = await Wallet.findOneAndUpdate(
-          { accountNumber: data.accountNumber },
-          { $inc: { balance: data.amount } },
-          { new: true }
-        );
-
-        if (!updatedWallet) {
-          console.log("⚠️ Wallet not found for account:", data.accountNumber);
-        }
-      }
-
-      return res.status(200).send("Webhook processed successfully");
-    } catch (error) {
-      console.error("❌ 9PSB webhook error:", error);
-      return res.status(500).send("Error processing webhook");
-    }
-  };
-
-
   // 🟦 Blockradar webhook: handles USD (USDT) wallet events (This is for a direct REST API call)
   const blockradarWebhook = async (req, res) => {
     try {
@@ -133,7 +94,6 @@
   };
 
   module.exports = { 
-    ninePSBWebhook, 
     blockradarWebhook, 
     handleBlockradarWebhook 
   };

@@ -13,6 +13,8 @@ const transactionRoutes = require ("./routes/transactionRoute");
 const transferRoutes = require ("./routes/transferRoute");
 const p2pRoutes = require ("./routes/p2pRoute");
 const merchantRoutes = require ("./routes/merchantRoutes");
+const { cancelExpiredTrades } = require('./services/p2pExpirationService');
+
 
 const app = express();
 app.set('trust proxy', 1);
@@ -56,12 +58,16 @@ app.use("/api", transferRoutes)
 app.use("/api", p2pRoutes)
 app.use("/api", merchantRoutes)
 app.use("/api", webhookRoutes)
-// app.use("/", webhookRoutes)
+
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, ()=>{
     console.log(`Server is running on port ${PORT}`);
 });
+
+setInterval(() => {
+    cancelExpiredTrades().catch(err => console.error("Expiration error:", err));
+}, 60 * 1000); // runs every 1 minute
 
 console.log("Prembly API ID:", process.env.PREMBLY_API_ID);
 console.log("Prembly API Key:", process.env.PREMBLY_API_KEY ? "✅ Loaded" : "❌ Missing");

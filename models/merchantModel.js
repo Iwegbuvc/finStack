@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const merchantSchema = new mongoose.Schema({
+const merchantAdSchema = new mongoose.Schema({
     userId: { 
         type: mongoose.Schema.Types.ObjectId, 
         ref: 'User', 
@@ -95,9 +95,6 @@ availableAmount: {
     
 }, { timestamps: true });
 
-// Optional: Add a combined index for fast ad lookup by type, asset, and fiat
-merchantSchema.index({ type: 1, asset: 1, fiat: 1, status: 1 });
-
-const MerchantAd = mongoose.model('MerchantAd', merchantSchema); // Renamed model to MerchantAd for clarity
+const MerchantAd = mongoose.model('MerchantAd', merchantAdSchema); // Renamed model to MerchantAd for clarity
 
 module.exports = MerchantAd;

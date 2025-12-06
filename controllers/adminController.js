@@ -98,7 +98,6 @@ const adminUpdateKycStatus = async (req, res) => {
         // ==========================  APPROVAL  ===============================
         if (status === "APPROVED") {
             // 1. CREATE BLOCKRADER CHILD ADDRESS (Universal Wallet)
-
             const { externalWalletId, cryptoAddress, accountName } =
                 await createStablecoinAddress({
                     userId: kycRecord.user_id._id,
@@ -108,9 +107,7 @@ const adminUpdateKycStatus = async (req, res) => {
 
             const childAddressId = externalWalletId;
             console.log("✅ Step 1 Complete: Stablecoin Child Address created.");
-
             // 2A. ALWAYS CREATE USDC WALLET (FOR ALL USERS)
-
             await createWalletRecord({
                 userId: kycRecord.user_id._id,
                 currency: "USDC",
@@ -120,7 +117,6 @@ const adminUpdateKycStatus = async (req, res) => {
                 session,
             });
             console.log("✅ Step 2a Complete: USDC Wallet record created.");
-
             // 2B. ALWAYS CREATE cNGN WALLET (FOR ALL USERS)
             await createWalletRecord({
                 userId: kycRecord.user_id._id,
@@ -144,7 +140,6 @@ const adminUpdateKycStatus = async (req, res) => {
                     email: kycRecord.user_id.email,
                     phoneNo: kycRecord.phone_number,
                 };
-
                 const virtualAccountDetails =
                     await createVirtualAccountForChildAddress(
                         childAddressId,
@@ -168,7 +163,6 @@ const adminUpdateKycStatus = async (req, res) => {
                     `Non-Nigerian User (${kycRecord.country}) → NGN wallet skipped.`
                 );
             }
-
             // 5. FINALIZE KYC STATUS
             kycRecord.status = "APPROVED";
             await kycRecord.save({ session });
@@ -244,7 +238,6 @@ const getAllKycRecords = async (req, res) => {
         });
     }
 };
-
 /* ==========   USER/ADMIN: Get Single KYC Record  ==========  */
 const getSingleKyc = async (req, res) => {
     try {

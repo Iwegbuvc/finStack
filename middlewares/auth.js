@@ -1,20 +1,23 @@
-// middlewares/roleAuth.js
 const merchantOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== "merchant") {
+  if (!req.user?.role || req.user.role !== "merchant") {
+    console.warn(`Access denied for user: ${req.user?.id || "unknown"}`);
     return res.status(403).json({ message: "Access denied: Merchants only" });
   }
   next();
 };
 
+
 const adminOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== "admin") {
+  if (!req.user?.role || req.user.role !== "admin") {
+    console.warn(`Access denied for user: ${req.user?.id || "unknown"}`);
     return res.status(403).json({ message: "Access denied: Admins only" });
   }
   next();
 };
 
 const userOnly = (req, res, next) => {
-  if (!req.user || req.user.role !== "user") {
+  if (!req.user?.role || req.user.role !== "user") {
+    console.warn(`Access denied for user: ${req.user?.id || "unknown"}`);
     return res.status(403).json({ message: "Access denied: Users only" });
   }
   next();

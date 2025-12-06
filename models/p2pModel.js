@@ -3,15 +3,17 @@ const mongoose = require('mongoose');
 const P2PTradeSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     merchantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    merchantAdId: { type: mongoose.Schema.Types.ObjectId, ref: 'MerchantAd', required: true,  index: true },
     reference: { type: String, unique: true, required: true },
     amountSource: { type: Number, required: true },
     amountTarget: { type: Number, required: true },
-    provider: {type: String, enum: ["BLOCKRADER"],required: true,},
+    provider: {type: String, enum: ["BLOCKRADAR"],required: true,},
     rate: { type: Number, required: true },
-    currencySource: { type: String, enum: ["cNGN", "USDC", "GHS", "XAF", "XOF", "RMB"], required: true },
+    currencySource: { type: String, enum: ["NGN","cNGN", "USDC", "GHS", "XAF", "XOF", "RMB"], required: true },
     currencyTarget: { type: String, enum: ["cNGN", "USDC"], required: true },
     transactionType: {  type: String,  default: "P2P",  },
    status: {type: String, enum: ['PENDING_PAYMENT','ESCROWED_AWAITING_MERCHANT_TRANSFER','PAYMENT_CONFIRMED_BY_BUYER','COMPLETED','FAILED','CANCELLED','CANCELLED_REVERSED',], default: 'PENDING_PAYMENT',},
+   expiresAt: { type: Date, required: true },
     metadata: Object,
 logs: [
   {

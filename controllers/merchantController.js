@@ -47,7 +47,7 @@ const createMerchantAd = async (req, res) => {
     }
 
     if (!req.user.kycVerified) {
-      return res.status(403).json({ message: "Merchant must complete KYC verification." });
+      return res.status(403).json({ message: "Merchant must complete KYC verification.." });
     }
 
     const ad = await MerchantAd.create({

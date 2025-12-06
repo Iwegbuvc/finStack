@@ -524,7 +524,7 @@
 const p2pService = require("../services/p2pService");
 const blockrader = require("../services/providers/blockrader"); 
 const User = require("../models/userModel"); 
-// const MerchantAd = require("../models/merchantModel"); 
+const MerchantAd = require("../models/merchantModel"); 
 
 /**
  * Helper function to map service errors to appropriate HTTP status codes.
@@ -596,53 +596,129 @@ const createUsdWallet = async (req, res) => {
  */
 
 // 1. Initiate trade (POST /trade/initiate) - CORRECTED
+// const createTrade = async (req, res) => {
+//   try {
+//     // userId comes from the middleware (verifyToken) after successful authentication
+//     const userId = req.user.id;
+//     const ip = req.ip;
+    
+//     // Extract all necessary fields 
+//     const { merchantId, amountSource, amountTarget, provider, rate, sourceAccountNumber, currencySource, currencyTarget, destinationAddress } = req.body;
+    
+//     // Validation for required fields
+//     if (!merchantId || !amountSource || !amountTarget || !provider || !rate || !currencySource || !currencyTarget) {
+//       return handleServiceError(res, new Error("Missing or invalid required trade details: merchantId, amountSource, amountTarget, currencySource, currencyTarget, and rate are required for trade initiation."));
+//     }
+    
+//     const tradeDetails = {
+//       userId,
+//       merchantId,
+//       amountSource,
+//       amountTarget,
+//       provider,
+//       rate,
+//       sourceAccountNumber, // NGN Wallet/Account (for 9PSB)
+//       destinationAddress,  // Crypto Address (for Blockrader)
+//       currencySource,
+//       currencyTarget,
+//       ip,
+//     };
+    
+//     const newTrade = await p2pService.initiateTrade(
+//       userId, // buyerId
+//       merchantId,
+//       tradeDetails, // data object (containing all details)
+//       ip
+//     );
+
+//     res.status(201).json({
+//       message: "Trade initiated successfully.",
+//       data: newTrade,
+//     });
+//   } catch (error) {
+//     handleServiceError(res, error);
+//   }
+// }
+
+// Corrected function that used adID
 const createTrade = async (req, res) => {
   try {
-    // userId comes from the middleware (verifyToken) after successful authentication
     const userId = req.user.id;
     const ip = req.ip;
-    
-    // Extract all necessary fields 
-    const { merchantId, amountSource, amountTarget, provider, rate, sourceAccountNumber, currencySource, currencyTarget, destinationAddress } = req.body;
-    
-    // Validation for required fields
-    if (!merchantId || !amountSource || !amountTarget || !provider || !rate || !currencySource || !currencyTarget) {
-      return handleServiceError(res, new Error("Missing or invalid required trade details: merchantId, amountSource, amountTarget, currencySource, currencyTarget, and rate are required for trade initiation."));
+
+    const { adId } = req.params;
+    const { amountSource } = req.body;
+
+    if (!adId || !amountSource) {
+      return handleServiceError(res, new Error("Ad ID and amountSource are required."));
+    }
+
+    if (isNaN(amountSource) || amountSource <= 0) {
+      return handleServiceError(res, new Error("Invalid amountSource."));
+    }
+
+    // Fetch the ad
+    const merchantAd = await MerchantAd.findById(adId);
+    if (!merchantAd) {
+      return res.status(404).json({ success: false, message: "Ad not found." });
+    }
+
+    if (merchantAd.status !== "ACTIVE") {
+      return res.status(400).json({ success: false, message: "Ad is not active." });
+    }
+
+    // Prevent user from trading on their own ad
+    if (String(merchantAd.userId) === String(userId)) {
+      return res.status(400).json({ success: false, message: "You cannot trade on your own ad." });
+    }
+
+    // Validate limits
+    if (amountSource < merchantAd.minLimit || amountSource > merchantAd.maxLimit) {
+      return res.status(400).json({
+        success: false,
+        message: `Amount must be between ${merchantAd.minLimit} and ${merchantAd.maxLimit} ${merchantAd.fiat}.`
+      });
     }
     
+    // 🛑 REMOVED: Redundant pre-check and non-atomic deduction.
+    // The availability check and atomic deduction now happens in p2pService.initiateTrade
+    
+    // We pass the document here, but the service uses the ID for the atomic update
+    const rate = merchantAd.price;
+    const amountTarget = parseFloat((amountSource / rate).toFixed(8));
+
     const tradeDetails = {
       userId,
-      merchantId,
+      merchantId: merchantAd.userId,
+      adId: merchantAd._id,
       amountSource,
       amountTarget,
-      provider,
       rate,
-      sourceAccountNumber, // NGN Wallet/Account (for 9PSB)
-      destinationAddress,  // Crypto Address (for Blockrader)
-      currencySource,
-      currencyTarget,
+      currencySource: merchantAd.fiat,
+      currencyTarget: merchantAd.asset,
+      provider: "BLOCKRADAR",
       ip,
+      timeLimit: merchantAd.timeLimit, // ✅ Pass timeLimit
     };
+
+
+    // 🛑 REMOVED: Redundant deduction and save. The service handles the atomic reservation.
+    // merchantAd.availableAmount -= amountSource;
+    // await merchantAd.save();
     
-    // FIX APPLIED HERE: Renamed from p2pService.createTrade to p2pService.initiateTrade
-    // and adapted to the service's expected 4-argument signature.
-    const newTrade = await p2pService.initiateTrade(
-      userId, // buyerId
-      merchantId,
-      tradeDetails, // data object (containing all details)
-      ip
-    );
+    // Initiate the trade using the service layer
+    const newTrade = await p2pService.initiateTrade(userId, merchantAd, tradeDetails, ip);
 
     res.status(201).json({
+      success: true,
       message: "Trade initiated successfully.",
       data: newTrade,
     });
+
   } catch (error) {
     handleServiceError(res, error);
   }
-}
-
-
+};
 // 2. Buyer confirms they’ve paid (starts escrow, POST /trade/:reference/confirm-buyer-payment)
 const buyerConfirmPayment = async (req, res) => {
   try {
@@ -664,30 +740,6 @@ const buyerConfirmPayment = async (req, res) => {
     handleServiceError(res, error);
   }
 }
-
-// // 3. Merchant confirms receipt of fiat (releases escrow, POST /trade/:reference/confirm-merchant-payment)
-// const merchantConfirmPayment = async (req, res) => {
-//   try {
-//     const merchantId = req.user.id;
-//     const { reference } = req.params;
-//     const ip = req.ip;
-    
-//     if (!reference) {
-//       return handleServiceError(res, new Error("Trade reference is required in the URL path."));
-//     }
-
-//     // NOTE: The service layer (p2pService.js) handles destination lookup from the Wallet model, 
-//     // so no address needs to be passed here.
-//     const trade = await p2pService.confirmMerchantPayment(reference, merchantId, ip);
-
-//     res.status(200).json({
-//       message: "Trade successfully settled. Escrow released to respective parties.",
-//       data: trade,
-//     });
-//   } catch (error) {
-//     handleServiceError(res, error);
-//   }
-// }
 
 // // 3a. Initiate Merchant Confirm Payment (POST /trade/:reference/initiate-merchant-payment-confirmation)
 const initiateMerchantConfirmPayment = async (req, res) => {

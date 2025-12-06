@@ -559,6 +559,7 @@ const Wallet = require("../models/walletModel");
 const blockrader = require("./providers/blockrader");
 const { generateAndSendOtp, verifyOtp } = require('../utilities/otpUtils'); 
 const { updateTradeStatusAndLogSafe } = require('../utilities/tradeUpdater');
+const MerchantAd = require("../models/merchantModel");
 
 // Custom Error Class for clearer API responses
 class TradeError extends Error {
@@ -602,19 +603,7 @@ function safeLog(trade, logEntry) {
 }
 /**
  * Helper to resolve the provider-specific Wallet ID for a user and currency.
- */
-// async function resolveUserWalletId(userId, currency) {
-//     const wallet = await Wallet.findOne({ user_id: userId, currency: currency.toUpperCase() }).lean();
-    
-//     if (!wallet || !wallet.externalWalletId) {
-//         throw new TradeError(`Wallet not found or missing provider ID for user ${userId} and currency ${currency}.`, 404);
-//     }
-//     return wallet.externalWalletId;
-// }
-
-
-
-// USED FOR CNGN TESTING 
+ */ 
 async function resolveUserWalletId(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId); 
@@ -638,16 +627,6 @@ async function resolveUserWalletId(userId, currency) {
 /**
  * Helper to resolve the external crypto address for a user and currency.
  */
-// async function resolveUserCryptoAddress(userId, currency) {
-//     const wallet = await Wallet.findOne({ user_id: userId, currency: currency.toUpperCase() }).lean();
-    
-//     if (!wallet || !wallet.walletAddress) {
-//         throw new TradeError(`Missing destination crypto address for user ${userId} and target currency ${currency}.`, 400);
-//     }
-//     return wallet.walletAddress;
-// }
-
-// USED FOR CNGN TESTING
 async function resolveUserCryptoAddress(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -715,29 +694,66 @@ async function performEscrow(trade, sourceWalletId, masterCryptoAddress, actorId
 
 // --------- Service functions ----------
 module.exports = {
-    async initiateTrade(buyerId, merchantId, data, ip = null) {
+   async initiateTrade(buyerId, merchantAd, data, ip = null) {
         await checkUser(buyerId);
-        await checkUser(merchantId);
+        await checkUser(merchantAd.userId);
 
-        // 1. Create initial DB record inside a transaction
+        // 🛑 REMOVED: Old non-atomic liquidity deduction. It will now be done atomically inside the transaction.
+
+        // ✅ 1. Validate the time limit
+        if (!data.timeLimit || isNaN(data.timeLimit)) {
+            throw new Error("Merchant ad timeLimit is missing or invalid");
+        }
+
+        // ✅ 2. Calculate expiration time
+        const expiresAt = new Date(Date.now() + Number(data.timeLimit) * 60 * 1000);
+        console.log("Trade expires at:", expiresAt);
+        const tradeAmount = data.amountSource; // Define for clarity
+
+        // ----------------------------------------------
+        // TRANSACTION SECTION
+        // ----------------------------------------------
         const session = await mongoose.startSession();
         session.startTransaction();
         let trade;
-
+        let adUpdateResult;
+ 
         try {
+            // CRITICAL FIX: 3. Atomically deduct liquidity within the transaction.
+            // This ensures atomicity with the trade creation and acts as a concurrent availability check.
+            adUpdateResult = await MerchantAd.findOneAndUpdate(
+                {
+                    _id: merchantAd._id, // Use the ad's ID for the update
+                    availableAmount: { $gte: tradeAmount } // Ensure funds are available
+                },
+                { 
+                    $inc: { availableAmount: -tradeAmount }, // ATOMICALLY deduct the amount
+                    // Optional: $set: { updatedAt: new Date() } 
+                },
+                { new: true, session } // IMPORTANT: Pass the session
+            );
+
+            if (!adUpdateResult) {
+                // If update fails, it means funds were insufficient (due to $gte check) or the ad was not found/available.
+                throw new Error("Insufficient liquidity or merchant ad not found/active.", 409); 
+            }
+
+            // 4. Create initial P2PTrade DB record (using the same session)
             const tradeDoc = await P2PTrade.create(
                 [
                     {
                         reference: `${data.reference || `REF_${Date.now()}`}`,
                         userId: buyerId,
-                        merchantId,
+                        merchantId: merchantAd.userId,
+                        merchantAdId: merchantAd._id,
                         amountSource: data.amountSource,
                         amountTarget: data.amountTarget,
                         currencySource: data.currencySource,
                         currencyTarget: data.currencyTarget,
                         rate: data.rate || 1,
-                        provider: "BLOCKRADER",
-                        status: ALLOWED_STATES.INIT, 
+                        provider: "BLOCKRADAR",
+                        status: "PENDING_PAYMENT",
+                        expiresAt,
                         logs: []
                     }
                 ],
@@ -745,14 +761,25 @@ module.exports = {
             );
 
             trade = tradeDoc[0];
-            // NOTE: Initial log still uses old helper as trade object doesn't have _id yet
-            safeLog(trade, { message: "Trade created. Awaiting buyer payment.", actor: buyerId, role: "buyer", ip, time: new Date() });
-            
-            await trade.save({ session });
-            await session.commitTransaction();
 
+            // Add initial log
+            safeLog(trade, {
+                message: "Trade created. Awaiting buyer payment.",
+                actor: buyerId,
+                role: "buyer",
+                ip,
+                time: new Date(),
+            });
+
+            // Note: trade.save({ session }) is redundant after P2PTrade.create([...], {session}) and is removed.
+            await session.commitTransaction();
         } catch (err) {
             await session.abortTransaction();
+            // Handle specific errors for clearer response
+            if (err.message.includes("Insufficient liquidity")) {
+                 // Re-throw the specific error for amount check
+                 throw new Error("Amount exceeds available liquidity.");
+            }
             throw err;
         } finally {
             session.endSession();
