@@ -62,7 +62,7 @@ const validatePassword = (req, res, next) => {
   if (!password) {
     errors.push("Enter your password");
   } else if (
-    !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/.test(password)
+    !/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&#]{8,}$/.test(password)
   ) {
     errors.push("Password must contain uppercase, lowercase, number, and special character");
   }

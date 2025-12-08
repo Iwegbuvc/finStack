@@ -287,7 +287,7 @@ const forgotPassword = async (req, res) => {
 
     // Send email
     const html = forgotPasswordMail(foundUser.firstName, resetToken);
-    await sendMail(foundUser.email, "Reset Your Password - Finstack", html);
+    sendMail(foundUser.email, "Reset Your Password - Finstack", html);
 
     return res
       .status(200)
