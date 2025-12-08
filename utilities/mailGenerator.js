@@ -272,7 +272,7 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.URL}/reset-password?token=${resetPasswordToken}" 
+                            <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}" 
                                style="display: inline-block; padding: 14px 35px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Reset Password

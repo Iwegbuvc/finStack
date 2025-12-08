@@ -140,7 +140,7 @@ const loginUser = async (req, res) => {
     }
     // Generate access 
     const accessToken = jwt.sign(
-      { id: foundUser._id, email: foundUser.email },
+      { id: foundUser._id, email: foundUser.email, role: foundUser.role },
       process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "1h" }
     );
