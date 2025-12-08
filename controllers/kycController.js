@@ -5,8 +5,7 @@ const Kyc = require("../models/kycModel");
 const cloudinary = require("cloudinary").v2;
 const extractPublicId = require("../utilities/extractPublicId");
 const { verifyBVN, verifyNIN } = require("../services/prembly");
-const { decrypt } = require('../utilities/encryptionUtils'); // <-- RE-ADDED DECRYPT UTILITY
-
+const { decrypt } = require('../utilities/encryptionUtils'); 
 
 // --------------------- Joi Validation ---------------------
 const kycSchema = Joi.object({
