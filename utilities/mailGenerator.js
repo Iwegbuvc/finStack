@@ -358,7 +358,7 @@ const generatePasswordResetMail = (firstName) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 20px auto;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.URL}" 
+                            <a href="${process.env.FRONTEND_URL}" 
                                style="display: inline-block; padding: 14px 35px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Log In Now

@@ -13,15 +13,12 @@ const validateNewUser = async(req, res, next)=>{
         errors.push("Invalid email format")
     }
 
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&]{8,}$/.test(password)) {
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/.test(password))
+      
+
+      {
     errors.push("Password must contain uppercase, lowercase, number, and special character");
     }
-
-  //   if(!phoneNumber) {errors.push("Phone number is required")
-
-  //   }else if (!/^\d{7,15}$/.test(phoneNumber)) {
-  //   errors.push("Invalid phone number format");
-  // }
 
     if(errors.length > 0){
         return res.status(400).json({message: errors})
