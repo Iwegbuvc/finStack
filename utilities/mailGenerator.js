@@ -283,7 +283,7 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
                 
                 <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 14px;">
                     Or copy and paste this link into your browser:<br>
-                    <a href="${process.env.URL}/reset-password?token=${resetPasswordToken}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/reset-password?token=${resetPasswordToken}</a>
+                    <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/reset-password?token=${resetPasswordToken}</a>
                 </p>
                 
                 <p style="line-height: 1.6; margin: 0; color: #666; font-size: 12px;">

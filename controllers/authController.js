@@ -14,7 +14,7 @@ const registerUser = async (req, res) => {
       email,
       password,
       howYouHeardAboutUs,
-      role // include role
+      // role 
     } = req.body;
 
     // Check if user already exists
@@ -43,7 +43,7 @@ const registerUser = async (req, res) => {
       password: hashedPassword,
       howYouHeardAboutUs,
       verificationCode: verification,
-      role: role || "user" // <-- if no role, default to user
+      role: "user" 
     });
 
     await sendMail(email, "Welcome to Finstack", html);
