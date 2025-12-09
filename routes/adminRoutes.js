@@ -1,15 +1,6 @@
 const express = require("express");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const { 
-    getAllTrades, 
-    getTradeDetails, 
-    getAllTransactions,
-    getAllUsers,           
-    updateUserRole,        
-    adminUpdateKycStatus,  
-    getAllKycRecords,      
-    getSingleKyc           
-} = require("../controllers/adminController"); // Assuming the admin functions live here
+const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc} = require("../controllers/adminController");
 
 const router = express.Router();
 
@@ -29,8 +20,8 @@ router.get("/getSingleKyc/:id", verifyToken, getSingleKyc);
 router.get("/admin/getAllKycs", verifyToken, isAdmin, getAllKycRecords);
 
 // Admin trade management 
-router.get("/admin/trades", isAdmin, getAllTrades);
-router.get("/admin/trades/:reference", isAdmin, getTradeDetails);
+router.get("/admin/trades", verifyToken, isAdmin, getAllTrades);
+router.get("/admin/trades/:reference", verifyToken, isAdmin, getTradeDetails);
 
 // Admin only routes for transactions
 router.get("/admin/all-transaction", verifyToken, isAdmin, getAllTransactions);

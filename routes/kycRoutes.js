@@ -1,16 +1,73 @@
+// const express = require("express");
+// const kycController = require("../controllers/kycController");
+// const { validateKYC } = require("../middlewares/validation");
+// const { verifyToken, isAdmin } = require("../middlewares/validateToken");
+// const { upload, uploadErrorHandler } = require("../utilities/fileUpload");
+// const { kycRateLimit } = require("../middlewares/rateLimiter");
+
+// const router = express.Router();
+
+// router.post(
+//   "/submitKyc",
+//   verifyToken, // ensures req.user is populated
+//   kycRateLimit, // custom DB-backed rate limiter
+//   upload.fields([
+//     { name: "selfie", maxCount: 1 },
+//     { name: "proof_id_front", maxCount: 1 },
+//     { name: "proof_id_back", maxCount: 1 },
+//     { name: "proof_address", maxCount: 1 },
+//   ]),
+//   uploadErrorHandler,
+//   kycController.submitKYC
+// );
+
+// // admin updates KYC status
+// // router.put(
+// //   "/admin/updateKyc",
+// //   verifyToken,
+// //   isAdmin,
+// //   kycController.adminUpdateKycStatus
+// // );
+
+// // admin gets all records
+// // router.get(
+// //   "/admin/getAllKycs",
+// //   verifyToken,
+// //   isAdmin,
+// //   kycController.getAllKycRecords
+// // );
+
+// // get single KYC record
+// // - ADMIN: can fetch any user's KYC
+// // - USER: can only fetch their own KYC
+// router.get(
+//   "/getSingleKyc/:id",
+//   verifyToken,
+//   kycController.getSingleKyc
+// );
+
+// module.exports = router;
+
+// routes/kycRoutes.js
 const express = require("express");
-const kycController = require("../controllers/kycController");
-const { validateKYC } = require("../middlewares/validation");
-const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const { upload, uploadErrorHandler } = require("../utilities/fileUpload");
-const { kycRateLimit } = require("../middlewares/rateLimiter");
-
 const router = express.Router();
+const { verifyToken } = require("../middlewares/validateToken");
+const {kycRateLimit, kycIpLimiter } = require("../middlewares/rateLimiter");
+const { upload, uploadErrorHandler } = require("../utilities/fileUpload");
+const kycController = require("../controllers/kycController");
 
+// POST: create short-lived KYC session token
+router.post("/kycSession", verifyToken, kycController.createKycSession);
+
+// POST: perform liveliness check (rate limited)
+router.post("/kycLiveliness", verifyToken, kycIpLimiter, kycController.livelinessCheck);
+
+// POST: final KYC submission (requires liveliness proven)
 router.post(
   "/submitKyc",
-  verifyToken, // ensures req.user is populated
-  kycRateLimit, // custom DB-backed rate limiter
+  verifyToken,          // user must be logged in
+  kycIpLimiter,         // protect against IP spam
+  kycRateLimit,         // ensure only 1 KYC per 24 hours
   upload.fields([
     { name: "selfie", maxCount: 1 },
     { name: "proof_id_front", maxCount: 1 },
@@ -20,30 +77,6 @@ router.post(
   uploadErrorHandler,
   kycController.submitKYC
 );
-
-// admin updates KYC status
-// router.put(
-//   "/admin/updateKyc",
-//   verifyToken,
-//   isAdmin,
-//   kycController.adminUpdateKycStatus
-// );
-
-// admin gets all records
-// router.get(
-//   "/admin/getAllKycs",
-//   verifyToken,
-//   isAdmin,
-//   kycController.getAllKycRecords
-// );
-
-// get single KYC record
-// - ADMIN: can fetch any user's KYC
-// - USER: can only fetch their own KYC
-router.get(
-  "/getSingleKyc/:id",
-  verifyToken,
-  kycController.getSingleKyc
-);
+ router.get("/getSingleKyc/:id",verifyToken, kycController.getSingleKyc);
 
 module.exports = router;

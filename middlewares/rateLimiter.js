@@ -32,9 +32,8 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// =======================================================
+
 // 2. CUSTOM Database-Backed Limiter (24-hour KYC Cooldown)
-// =======================================================
 
 const kycRateLimit = async (req, res, next) => {
   try {
@@ -60,9 +59,12 @@ const kycRateLimit = async (req, res, next) => {
     return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
+const kycIpLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 6, // per IP
+  message: { message: "Too many KYC attempts from this IP, try again later" },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-// =======================================================
-// 3. UNIFIED EXPORT
-// =======================================================
-
-module.exports = { kycRateLimit, walletLimiter, transactionLimiter, authLimiter };
+module.exports = { kycRateLimit, kycIpLimiter, walletLimiter, transactionLimiter, authLimiter };
