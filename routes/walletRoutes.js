@@ -1,13 +1,8 @@
 const { 
-    createWallet, 
-    getWalletBalance,
-    getWallet, 
-    getAllWallets,
-    // 💡 1. DESTRUCTURE NEW FUNCTIONS
     initiateWithdrawal, 
     completeWithdrawal,
-    // depositFundsNinepsb,
-    addTestFunds
+    addTestFunds,
+    getDashboardBalances
 } = require("../controllers/walletController");
 
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
@@ -16,11 +11,7 @@ const { walletLimiter, transactionLimiter } = require("../middlewares/rateLimite
 
 const router = require("express").Router();
 
-// router.post("/createWallet", createWallet);
-// router.get("/walletBalance", verifyToken, walletLimiter, getWalletBalance);
-// router.get("/getAllWallets", verifyToken, isAdmin, getAllWallets);
-
-// Note: Assuming depositFunds is now also destructured from the controller
+router.get("/wallet/user-balances", verifyToken, getDashboardBalances);
 // router.post("/deposit", depositFundsNinepsb); 
 router.post("/test/addFunds", 
     verifyToken,

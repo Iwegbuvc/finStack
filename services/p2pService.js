@@ -560,6 +560,10 @@ const blockrader = require("./providers/blockrader");
 const { generateAndSendOtp, verifyOtp } = require('../utilities/otpUtils'); 
 const { updateTradeStatusAndLogSafe } = require('../utilities/tradeUpdater');
 const MerchantAd = require("../models/merchantModel");
+const logger = require("../utilities/logger");
+const { getCache, setCache, redisClient } = require('../utilities/redis');
+const CACHE_TTL = Number(process.env.BALANCE_CACHE_TTL_SECONDS || 30);
+
 
 // Custom Error Class for clearer API responses
 class TradeError extends Error {
@@ -649,9 +653,6 @@ async function resolveUserCryptoAddress(userId, currency) {
 }
 // ----------------------------------------------------
 
-/**
- * ❌ REMOVED: updateTradeStatusAndLog is replaced by updateTradeStatusAndLogSafe from tradeUpdater.js
- */
 // async function updateTradeStatusAndLog(...) { /* ... */ }
 
 
@@ -660,40 +661,96 @@ async function resolveUserCryptoAddress(userId, currency) {
  * @description Isolates the external API call and handles immediate failure.
  * @throws {TradeError} If the provider API initiation fails.
  */
-async function performEscrow(trade, sourceWalletId, masterCryptoAddress, actorId, ip, role) {
-    const transferResult = await blockrader.transferFunds(
-        sourceWalletId,
-        blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-        trade.amountTarget,
-        trade.currencyTarget,
-        masterCryptoAddress
-    );
+// async function performEscrow(trade, sourceWalletId, masterCryptoAddress, actorId, ip, role) {
+//     const transferResult = await blockrader.transferFunds(
+//         sourceWalletId,
+//         blockrader.BLOCKRADER_MASTER_WALLET_UUID,
+//         trade.amountTarget,
+//         trade.currencyTarget,
+//         masterCryptoAddress
+//     );
 
-    // CRITICAL CHECK
-    if (!transferResult || !transferResult.data || !transferResult.data.id) {
-        const errorMessage = `Failed to escrow funds. Provider response: ${JSON.stringify(transferResult)}`;
-        console.error(errorMessage);
+//     // CRITICAL CHECK
+//     if (!transferResult || !transferResult.data || !transferResult.data.id) {
+//         const errorMessage = `Failed to escrow funds. Provider response: ${JSON.stringify(transferResult)}`;
+//         console.error(errorMessage);
         
-        // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-        await updateTradeStatusAndLogSafe(
-            trade._id,
-            ALLOWED_STATES.FAILED,
-            { 
-                message: `Escrow attempt failed at provider API: ${errorMessage}`, 
-                actor: null, // 'system' actor is now null (ObjectId)
-                role: 'system', 
-                ip 
-            }
-        );
-        throw new TradeError("Failed to initiate escrow transfer: Provider API initiation failed.");
-    }
+//         // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
+//         await updateTradeStatusAndLogSafe(
+//             trade._id,
+//             ALLOWED_STATES.FAILED,
+//             { 
+//                 message: `Escrow attempt failed at provider API: ${errorMessage}`, 
+//                 actor: null, // 'system' actor is now null (ObjectId)
+//                 role: 'system', 
+//                 ip 
+//             }
+//         );
+//         throw new TradeError("Failed to initiate escrow transfer: Provider API initiation failed.");
+//     }
 
-    return transferResult;
-}
+//     return transferResult;
+// }
+
+
 
 
 // --------- Service functions ----------
 module.exports = {
+    
+async getAllUserWalletBalances(userId) {
+    const cacheKey = `balances:${userId}`;
+
+    // 1. Try to load from cache
+    const cached = await getCache(cacheKey);
+    if (cached) return cached;
+
+    // 2. Load wallets from DB
+    const wallets = await Wallet.find({
+        user_id: userId,
+        provider: "BLOCKRADAR",
+        status: "ACTIVE",
+        walletType: "USER"
+    }).lean();
+
+    if (!wallets || wallets.length === 0) {
+        await setCache(cacheKey, [], CACHE_TTL);
+        return [];
+    }
+
+    const results = [];
+
+    for (const w of wallets) {
+        logger.info(`Fetching balance for wallet: ${w.currency} / ID: ${w.externalWalletId}`); 
+        try {
+         const bal = await blockrader.getWalletBalance(w.externalWalletId, w.currency);
+         logger.info(`Successfully fetched balance for ${w.currency}.`);
+            results.push({
+                currency: w.currency,
+                walletAddress: w.walletAddress,
+                externalWalletId: w.externalWalletId,
+                balance: {
+                    available: bal?.available ?? 0,
+                    locked: bal?.locked ?? 0,
+                    total: bal?.total ?? 0,
+                }
+            });
+        } catch (err) {
+            logger.error(`❌ Blockrader balance fetch failed for ${w.currency}: ${err.message}`);
+            results.push({
+                currency: w.currency,
+                error: true,
+                balance: { available: 0, locked: 0, total: 0 }
+            });
+        }
+    }
+
+    // 3. Save into Redis cache
+    await setCache(cacheKey, results, CACHE_TTL);
+
+    return results;
+},
+
    async initiateTrade(buyerId, merchantAd, data, ip = null) {
         await checkUser(buyerId);
         await checkUser(merchantAd.userId);
@@ -839,6 +896,8 @@ module.exports = {
             ALLOWED_STATES.INIT // Ensure we are only updating from INIT state
         );
 
+        // ❗ Invalidate merchant balance cache after escrow deduction
+        await redisClient.del(`balances:${trade.merchantId}`);
         return updatedTrade;
     },
 
@@ -941,6 +1000,8 @@ module.exports = {
                 );
                 
                 await session.commitTransaction();
+                // ❗ Invalidate buyer balance cache after settlement credit
+                await redisClient.del(`balances:${trade.userId}`);
 
             } catch (dbError) {
                 await session.abortTransaction();
@@ -1042,6 +1103,10 @@ module.exports = {
                     );
                     
                     await session.commitTransaction();
+                    
+                  // ❗ Invalidate merchant balance cache after escrow reversal
+                   await redisClient.del(`balances:${trade.merchantId}`);
+
                     return updatedTrade;
                 } catch (dbError) {
                     await session.abortTransaction();

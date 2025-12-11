@@ -32,7 +32,6 @@
             console.error(`[Blockrader] ${context} failed:`, error.message);
         }
     }
-
     // -----------------------------
     // 🆕 NEW HELPER: Get Asset ID by Currency
     // -----------------------------
@@ -51,40 +50,78 @@
 
     // -----------------------------
     // 💰 NEW HELPER: Create Wallet DB Record
-    // -----------------------------
-    /**
-     * Creates a single Wallet record in the local database.
-     * This is a helper, used by the controller to create multiple records 
-     * (USDC, cNGN, NGN) all linked to the same Blockrader Address ID.
-     * @param {object} params
-     * @param {object} session - Mongoose session for transaction integrity.
-     */
     async function createWalletRecord({ userId, currency, externalWalletId, accountNumber, accountName, session, walletAddress}) {
-        const newWallet = new Wallet({
-            user_id: userId,
-            currency,
-            externalWalletId: externalWalletId, // Blockrader Address ID (UUID)
-            walletAddress: walletAddress,
-            account_number: accountNumber,      // Crypto Address (0x...) or Bank Account Number (900...)
-            account_name: accountName,
-            provider: "BLOCKRADAR", 
-            status: "ACTIVE",
-        });
+   const filter = { user_id: userId, currency };
+  const setOnInsert = {
+    user_id: userId,
+    currency,
+    externalWalletId: externalWalletId || null,
+    walletAddress: walletAddress || null,
+    account_number: accountNumber || null,
+    account_name: accountName || null,
+    provider: 'BLOCKRADAR',
+    status: 'ACTIVE',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 
-        // Pass the session for transactional integrity
-        await newWallet.save({ session });
-        return newWallet;
+  try {
+    // atomic-ish: creates once or leaves existing
+    await Wallet.updateOne(filter, { $setOnInsert: setOnInsert }, { upsert: true, session });
+
+    // return the current wallet (existing or newly created)
+    const wallet = await Wallet.findOne(filter).session(session);
+    return wallet;
+  } catch (err) {
+    // If duplicate key slipped through, treat as success and return existing wallet
+    if (err && err.code === 11000) {
+      return await Wallet.findOne(filter).session(session);
+    }
+    throw err; // bubble other errors
+  }
+   
     }
 
-    // -----------------------------
+    async function getOrCreateStablecoinAddress(user) {
+const existing = await Wallet.findOne({ user_id: user._id, currency: "USDC" });
+
+
+if (existing) {
+return {
+fromExisting: true,
+cryptoAddress: existing.cryptoAddress,
+externalWalletId: existing.externalWalletId
+};
+}
+
+
+// 🔄 Call original unchanged low-level function
+const newAddress = await createStablecoinAddress({
+userId: user._id,
+email: user.email,
+name: user.firstName
+});
+
+
+// 🆕 Prevent duplicates using upsert
+await Wallet.updateOne(
+{ user_id: user._id, currency: "USDC" },
+{
+$setOnInsert: {
+cryptoAddress: newAddress.cryptoAddress,
+externalWalletId: newAddress.externalWalletId,
+balance: 0,
+// network: "Polygon"
+}
+},
+{ upsert: true }
+);
+
+
+return { ...newAddress, fromExisting: false };
+}
+
     // 🚀 REFACTORED: CREATE BLOCKRADER ADDRESS (Replaces createUsdWallet)
-    // -----------------------------
-    /**
-     * CRITICAL: Creates a new unique CRYPTO ADDRESS under the Master Wallet.
-     * This Address is the single destination for ALL stablecoins (USDC, cNGN, etc.)
-     * @param {object} params
-     * @returns {object} { externalWalletId, cryptoAddress, accountName }
-     */
     async function createStablecoinAddress({ userId, email, name }) {
         try {
             if (!BLOCKRADER_MASTER_WALLET_UUID) {
@@ -122,19 +159,8 @@
             throw new Error(`Unable to create user address on Blockrader: ${error.message}`);
         }
     }
-    // -----------------------------
+
     // 🏦 CREATE VIRTUAL ACCOUNT (linked to Child Address)
-    // -----------------------------
-    // The following function remains unchanged from your original design, 
-    // but is included here for completeness of the file.
-    /**
-     * Creates a Virtual Account linked to a specific Child Address ID.
-     * This is the critical change to ensure cNGN goes to the user's wallet.
-     *
-     * @param {string} childAddressId - The UUID of the user's dedicated Address (from createStablecoinAddress).
-     * @param {object} kycData - Verified user data (firstName, lastName, email, phoneNo)
-     * @returns {object} { accountName, accountNumber, bankName, customerId, platformWalletId }
-     */
     async function createVirtualAccountForChildAddress(childAddressId, kycData) {
         const context = "Create Virtual Account (cNGN Deposit) for Child Address";
         
@@ -189,9 +215,70 @@
             throw new Error("Failed to create user's cNGN deposit account: " + (error.response?.data?.message || error.message));
         }
     }
-    // -----------------------------
+async function createVirtualAccountIfMissing(user, childAddressId, kycData) {
+
+    // 1. Check if NGN virtual account already exists
+    const existing = await Wallet.findOne({ user_id: user._id, currency: "NGN" });
+
+    if (existing) {
+        return { fromExisting: true, ...existing.toObject() };
+    }
+
+    // 2. Create a new Virtual Account (this calls Blockrader)
+    const virtualAccount = await createVirtualAccountForChildAddress(
+        childAddressId,  // MUST be Blockrader Address UUID
+        kycData          // must contain: firstName, lastName, email, phoneNo
+    );
+
+    // 3. Save NGN Bank Account in Wallet collection (idempotent)
+    await Wallet.updateOne(
+        { user_id: user._id, currency: "NGN" },
+        {
+            $setOnInsert: {
+                externalWalletId: childAddressId,
+                account_number: virtualAccount.accountNumber,
+                account_name: virtualAccount.accountName,
+                bankName: virtualAccount.bankName,
+                balance: 0,
+                provider: "BLOCKRADAR",
+                status: "ACTIVE"
+            }
+        },
+        { upsert: true }
+    );
+
+    return { fromExisting: false, ...virtualAccount };
+}
+
+// 💰 NEW HELPER: Get Single Wallet Balance
+async function getWalletBalance(externalWalletId, currency) {
+    try {
+        const assetId = getAssetId(currency);
+        
+        // This is the correct Blockrader endpoint to get a balance for a specific asset on an address.
+        const response = await axios.get(
+            `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses/${externalWalletId}/assets/${assetId}`,
+            { headers }
+        );
+
+        const assetData = response.data.data;
+        
+        if (!assetData || typeof assetData.balance === 'undefined') {
+            throw new Error(`Invalid balance data received for address ${externalWalletId}.`);
+        }
+
+        return { 
+            balance: parseFloat(assetData.balance), 
+            currency: currency.toUpperCase() 
+        };
+
+    } catch (error) {
+        logBlockraderError(`Get Balance for Address ${externalWalletId} / ${currency}`, error);
+        throw new Error(`Failed to fetch live balance for ${currency}.`);
+    }
+}
+
     // 🧾 Get User Address ID (Now returns the Address UUID)
-    // -----------------------------
     async function getUserAddressId(userId) {
       const wallet = await Wallet.findOne({ user_id: userId, currency: "USD" }); // Add currency filter if needed
 
@@ -212,9 +299,7 @@
       };
     }
 
-    // -----------------------------
     // 💸 Get Transfer Fee (Using a placeholder for internal transfers)
-    // -----------------------------
     async function getTransferFee(asset = "USD") {
       try {
         const { data } = await axios.get(`${BLOCKRADER_BASE_URL}/fees?asset=${asset}`, { headers });
@@ -225,18 +310,7 @@
       }
     }
 
-    // -----------------------------
     // ⬆️ CORE FUNDING FUNCTION: Fund Child Wallet (Master -> Child)
-    // -----------------------------
-    /**
-     * Funds a child address (user sub-account) by initiating a withdrawal from the Master Wallet.
-     * This uses the Master Wallet /withdraw endpoint.
-     *
-     * @param {string} destinationCryptoAddress - The Child Wallet's 0x... address (account_number)
-     * @param {number} amount - Amount to transfer.
-     * @param {string} currency - The currency symbol (e.g., 'USD').
-     * @param {string} [p2pReference] - The P2P trade reference to use for reconciliation.
-     */
     async function fundChildWallet(destinationCryptoAddress, amount, currency, p2pReference = null) {
       try {
         console.log(
@@ -368,10 +442,10 @@
           url,
           {
             assetId: assetId,
-            address: toCryptoAddress, // CRITICAL: The 0x address goes in the body 'address' field
+            address: toCryptoAddress, 
             amount: amount.toString(),
             requestId: idempotencyKey, 
-            // Use the P2P reference if provided, otherwise fall back to the idempotency key
+          
             reference: p2pReference || idempotencyKey
           },
           { headers }
@@ -387,14 +461,16 @@
 
     module.exports = {
         createWalletRecord,
+        getOrCreateStablecoinAddress,
         createStablecoinAddress,
         createVirtualAccountForChildAddress,
+        createVirtualAccountIfMissing,
         getUserAddressId,    
-        fundChildWallet, // Keep for Master -> Child compatibility/clarity
-        transferFunds, // ✅ NOW EXPORTED: The new routing wrapper for P2P service
+        fundChildWallet, 
+        transferFunds, 
         getAssetId,
         getTransferFee,  
-    //     createDepositAddress,  
+        getWalletBalance,
         withdrawFromBlockrader,  
         BLOCKRADER_MASTER_WALLET_UUID,  
         ESCROW_DESTINATION_ADDRESS,

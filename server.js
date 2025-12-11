@@ -14,7 +14,8 @@ const transferRoutes = require ("./routes/transferRoute");
 const p2pRoutes = require ("./routes/p2pRoute");
 const merchantRoutes = require ("./routes/merchantRoutes");
 const { cancelExpiredTrades } = require('./services/p2pExpirationService');
-
+const { redisClient } = require('./utilities/redis');
+const logger = require('./utilities/logger');
 
 const app = express();
 app.set('trust proxy', 1);
@@ -61,10 +62,35 @@ app.use("/api", webhookRoutes)
 
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, ()=>{
-    console.log(`Server is running on port ${PORT}`);
-});
+// app.listen(PORT, ()=>{
+//     console.log(`Server is running on port ${PORT}`);
+// });
 
+// Add Redis connection check and start server only after success
+async function startServer() {
+    try {
+        // Explicitly connect to Redis and wait for connection (if lazyConnect was true, 
+        // calling .connect() forces the attempt)
+        // if (redisClient.status !== 'ready' && redisClient.status !== 'connect' && redisClient.status !== 'connecting') {
+        //     await redisClient.connect();
+        // }
+        
+        logger.info('External services (DB, Redis) ready. Starting server.');
+
+        app.listen(PORT, ()=>{
+            console.log(`Server is running on port ${PORT}`);
+        });
+        
+        // ... (rest of server.js logic, like setInterval) ...
+
+    } catch (error) {
+        logger.error("FATAL: Failed to connect to Redis or other service.", error);
+        process.exit(1);
+    }
+}
+
+// Call the new async function
+startServer();
 setInterval(() => {
     cancelExpiredTrades().catch(err => console.error("Expiration error:", err));
 }, 60 * 1000); // runs every 1 minute

@@ -590,56 +590,9 @@ const createUsdWallet = async (req, res) => {
   }
 }
 
-
 /**
  * 🧩 Controller: Handles HTTP requests for P2P trading actions
  */
-
-// 1. Initiate trade (POST /trade/initiate) - CORRECTED
-// const createTrade = async (req, res) => {
-//   try {
-//     // userId comes from the middleware (verifyToken) after successful authentication
-//     const userId = req.user.id;
-//     const ip = req.ip;
-    
-//     // Extract all necessary fields 
-//     const { merchantId, amountSource, amountTarget, provider, rate, sourceAccountNumber, currencySource, currencyTarget, destinationAddress } = req.body;
-    
-//     // Validation for required fields
-//     if (!merchantId || !amountSource || !amountTarget || !provider || !rate || !currencySource || !currencyTarget) {
-//       return handleServiceError(res, new Error("Missing or invalid required trade details: merchantId, amountSource, amountTarget, currencySource, currencyTarget, and rate are required for trade initiation."));
-//     }
-    
-//     const tradeDetails = {
-//       userId,
-//       merchantId,
-//       amountSource,
-//       amountTarget,
-//       provider,
-//       rate,
-//       sourceAccountNumber, // NGN Wallet/Account (for 9PSB)
-//       destinationAddress,  // Crypto Address (for Blockrader)
-//       currencySource,
-//       currencyTarget,
-//       ip,
-//     };
-    
-//     const newTrade = await p2pService.initiateTrade(
-//       userId, // buyerId
-//       merchantId,
-//       tradeDetails, // data object (containing all details)
-//       ip
-//     );
-
-//     res.status(201).json({
-//       message: "Trade initiated successfully.",
-//       data: newTrade,
-//     });
-//   } catch (error) {
-//     handleServiceError(res, error);
-//   }
-// }
-
 // Corrected function that used adID
 const createTrade = async (req, res) => {
   try {
