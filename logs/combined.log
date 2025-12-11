@@ -3356,3 +3356,27 @@
 {"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Failed to fetch live balance for cNGN.","timestamp":"2025-12-11 11:52:51"}
 {"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 12:44:20"}
 {"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 12:44:20"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 12:44:26"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 12:44:26"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 12:52:10"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 12:52:10"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 12:54:25"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 12:54:25"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 13:03:07"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 13:03:07"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 13:06:02"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 13:06:02"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 13:10:39"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 13:10:39"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 13:35:29"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 13:35:29"}
+{"level":"info","message":"Fetching balance for wallet: USDC / ID: 2d27bf8e-3b48-4dd9-9751-03a27f5c8419","timestamp":"2025-12-11 13:36:09"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Failed to fetch live balance for USDC.","timestamp":"2025-12-11 13:36:10"}
+{"level":"info","message":"Fetching balance for wallet: cNGN / ID: 2d27bf8e-3b48-4dd9-9751-03a27f5c8419","timestamp":"2025-12-11 13:36:10"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Failed to fetch live balance for cNGN.","timestamp":"2025-12-11 13:36:10"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 13:51:10"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 13:51:11"}
+{"level":"info","message":"Fetching balance for wallet: USDC / ID: 2d27bf8e-3b48-4dd9-9751-03a27f5c8419","timestamp":"2025-12-11 13:51:22"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}
+{"level":"info","message":"Fetching balance for wallet: cNGN / ID: 2d27bf8e-3b48-4dd9-9751-03a27f5c8419","timestamp":"2025-12-11 13:51:25"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}

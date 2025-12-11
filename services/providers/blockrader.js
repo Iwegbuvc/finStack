@@ -180,7 +180,7 @@ return { ...newAddress, fromExisting: false };
 
         const payload = {
             firstname: kycData.firstName,
-            lastName: kycData.lastName,
+            lastname: kycData.lastName,
             email: kycData.email,
             phone: phoneInFormat, 
             // type: "AUTO_FUNDING" is the default.
@@ -252,13 +252,17 @@ async function createVirtualAccountIfMissing(user, childAddressId, kycData) {
 }
 
 // 💰 NEW HELPER: Get Single Wallet Balance
+// In your blockrader.js file
+
+// 💰 NEW HELPER: Get Single Wallet Balance
 async function getWalletBalance(externalWalletId, currency) {
     try {
         const assetId = getAssetId(currency);
         
-        // This is the correct Blockrader endpoint to get a balance for a specific asset on an address.
+        // 🚨 FIX: Corrected Blockrader endpoint structure.
+        // It should use the specific externalWalletId as the primary wallet identifier.
         const response = await axios.get(
-            `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses/${externalWalletId}/assets/${assetId}`,
+            `${BLOCKRADER_BASE_URL}/wallets/${externalWalletId}/assets/${assetId}`, // <--- CHANGED THIS LINE
             { headers }
         );
 
@@ -275,7 +279,8 @@ async function getWalletBalance(externalWalletId, currency) {
 
     } catch (error) {
         logBlockraderError(`Get Balance for Address ${externalWalletId} / ${currency}`, error);
-        throw new Error(`Failed to fetch live balance for ${currency}.`);
+        // It's helpful to re-throw the original error for debugging in the p2pService
+        throw error; 
     }
 }
 
@@ -466,6 +471,7 @@ async function getWalletBalance(externalWalletId, currency) {
         createStablecoinAddress,
         createVirtualAccountForChildAddress,
         createVirtualAccountIfMissing,
+        
         getUserAddressId,    
         fundChildWallet, 
         transferFunds, 

@@ -33,7 +33,7 @@ const generateNewUserMail = (verificationCode, firstName) => {
                         <tr>
                             <td style="background-color: #2F67FA; border-radius: 5px;">
                                
-                                <a href="${process.env.URL}/api/verify/${verificationCode}"
+                                <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}"
 
                                     style="display: inline-block; padding: 12px 30px; color: #ffffff; 
                                           text-decoration: none; font-weight: bold; font-size: 16px;">
@@ -46,7 +46,7 @@ const generateNewUserMail = (verificationCode, firstName) => {
                     <p style="line-height: 1.6; margin: 20px 0 0 0;">
                         If the button doesn't work, you can also copy and paste this link into your browser:
                         <br>
-                        <a href="${process.env.URL}/api/verify/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/api/verify/${verificationCode}</a>
+                        <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/api/verify/${verificationCode}</a>
                     </p>
                 </td>
             </tr>

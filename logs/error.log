@@ -3247,3 +3247,7 @@
 {"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Failed to fetch live balance for cNGN.","timestamp":"2025-12-11 11:44:00"}
 {"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Failed to fetch live balance for USDC.","timestamp":"2025-12-11 11:52:51"}
 {"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Failed to fetch live balance for cNGN.","timestamp":"2025-12-11 11:52:51"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Failed to fetch live balance for USDC.","timestamp":"2025-12-11 13:36:10"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Failed to fetch live balance for cNGN.","timestamp":"2025-12-11 13:36:10"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}
+{"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}
