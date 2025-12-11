@@ -3380,3 +3380,5 @@
 {"level":"error","message":"❌ Blockrader balance fetch failed for USDC: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}
 {"level":"info","message":"Fetching balance for wallet: cNGN / ID: 2d27bf8e-3b48-4dd9-9751-03a27f5c8419","timestamp":"2025-12-11 13:51:25"}
 {"level":"error","message":"❌ Blockrader balance fetch failed for cNGN: Request failed with status code 404","timestamp":"2025-12-11 13:51:25"}
+{"level":"info","message":"External services (DB, Redis) ready. Starting server.","timestamp":"2025-12-11 15:11:48"}
+{"level":"info","message":"🔑 Redis connected successfully.","timestamp":"2025-12-11 15:11:49"}
