@@ -61,13 +61,14 @@
     account_name: accountName || null,
     provider: 'BLOCKRADAR',
     status: 'ACTIVE',
-    createdAt: new Date(),
-    updatedAt: new Date(),
+ 
   };
 
   try {
     // atomic-ish: creates once or leaves existing
-    await Wallet.updateOne(filter, { $setOnInsert: setOnInsert }, { upsert: true, session });
+   
+    await Wallet.updateOne(filter, { $setOnInsert: setOnInsert }, { upsert: true, session, timestamps: false });
+
 
     // return the current wallet (existing or newly created)
     const wallet = await Wallet.findOne(filter).session(session);
@@ -244,7 +245,7 @@ async function createVirtualAccountIfMissing(user, childAddressId, kycData) {
                 status: "ACTIVE"
             }
         },
-        { upsert: true }
+        { upsert: true, timestamps: false }
     );
 
     return { fromExisting: false, ...virtualAccount };
