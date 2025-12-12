@@ -84,7 +84,7 @@
     }
 
     async function getOrCreateStablecoinAddress(user) {
-const existing = await Wallet.findOne({ user_id: user._id, currency: "USDC" });
+       const existing = await Wallet.findOne({ user_id: user._id, currency: "USDC" });
 
 
 if (existing) {
@@ -256,31 +256,51 @@ async function createVirtualAccountIfMissing(user, childAddressId, kycData) {
 
 // 💰 NEW HELPER: Get Single Wallet Balance
 async function getWalletBalance(externalWalletId, currency) {
-    try {
-        const assetId = getAssetId(currency);
-        
-        // 🚨 FIX: Corrected Blockrader endpoint structure.
-        // It should use the specific externalWalletId as the primary wallet identifier.
-        const response = await axios.get(
-            `${BLOCKRADER_BASE_URL}/wallets/${externalWalletId}/assets/${assetId}`, // <--- CHANGED THIS LINE
-            { headers }
-        );
+    const URL = `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/addresses/${externalWalletId}/balances`;
 
-        const assetData = response.data.data;
-        
-        if (!assetData || typeof assetData.balance === 'undefined') {
-            throw new Error(`Invalid balance data received for address ${externalWalletId}.`);
+    try {
+        const response = await axios.get(URL, { headers });
+
+        // All balances for this user address
+        const balancesArray = response.data?.data || [];
+       
+        const targetBalance = balancesArray.find(
+            (b) => b.asset?.asset?.symbol?.toLowerCase() === currency.toLowerCase() && b.asset.isActive === true
+        );
+        // ------------------
+
+        // No balance found → Return zero balance object
+        if (!targetBalance) {
+            return {
+                available: 0,
+                locked: 0,
+                total: 0,
+                currency: currency.toUpperCase()
+            };
         }
 
-        return { 
-            balance: parseFloat(assetData.balance), 
-            currency: currency.toUpperCase() 
+        const balance = parseFloat(targetBalance.balance || "0");
+
+        return {
+            available: balance,
+            locked: 0,
+            total: balance,
+            currency: currency.toUpperCase()
         };
 
     } catch (error) {
-        logBlockraderError(`Get Balance for Address ${externalWalletId} / ${currency}`, error);
-        // It's helpful to re-throw the original error for debugging in the p2pService
-        throw error; 
+        console.error("\n🚨 Blockradar Balance Error");
+        console.error("URL:", URL);
+        console.error("Status:", error.response?.status);
+        console.error("Message:", error.response?.data || error.message);
+        console.error("-------------------------------------");
+
+        // Use the actual error message from Blockrader when available
+        const status = error.response?.status;
+        if (status === 404) {
+             throw new Error("Unable to fetch wallet balance: Master or Address ID not found on Blockradar.");
+        }
+        throw new Error("Unable to fetch wallet balance: API call failed.");
     }
 }
 

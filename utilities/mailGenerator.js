@@ -157,7 +157,6 @@ const generateVerificationSuccessMail = (firstName) => {
 </html>
     `
 }
-
 const generateVerificationRequest = (firstName, verificationCode) => { 
     return `
         <!DOCTYPE html>
@@ -319,7 +318,6 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
 </html>
     `
 }
-
 const generatePasswordResetMail = (firstName) => {
     const date = getDatTimeUTC();
     return `
