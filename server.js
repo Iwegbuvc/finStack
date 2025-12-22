@@ -18,6 +18,12 @@ const { redisClient } = require('./utilities/redis');
 const logger = require('./utilities/logger');
 
 const app = express();
+
+// 🔑 START WORKER ONLY IF ENABLED
+if (process.env.RUN_WORKER === 'true') {
+  require('./workers/announcementWorker');
+}
+
 app.set('trust proxy', 1);
 const allowedOrigins = ["https://finstack-vert.vercel.app", "http://localhost:3000"]
 
