@@ -562,6 +562,7 @@ const { updateTradeStatusAndLogSafe } = require('../utilities/tradeUpdater');
 const MerchantAd = require("../models/merchantModel");
 const logger = require("../utilities/logger");
 const { getCache, setCache, redisClient } = require('../utilities/redis');
+const FeeConfig = require('../models/feeConfigModel');
 const CACHE_TTL = Number(process.env.BALANCE_CACHE_TTL_SECONDS || 30);
 
 
@@ -573,7 +574,6 @@ class TradeError extends Error {
         this.status = status;
     }
 }
-
 
 // Basic state machine allowed transitions
 const ALLOWED_STATES = {
@@ -587,9 +587,7 @@ const ALLOWED_STATES = {
 
 // --------- Helpers ----------
 
-/**
- * Helper to fetch a user and throw a standard error if not found.
- */
+/** Helper to fetch a user and throw a standard error if not found.*/
 async function checkUser(userId) {
     // Fetches user role for authorization checks and validates existence.
     const user = await User.findById(userId).select('role').lean(); 
@@ -599,15 +597,12 @@ async function checkUser(userId) {
     return user;
 }
 
-/**
- * Helper to log trade events. (This is now redundant but kept for initial trade creation)
- */
+/** Helper to log trade events. (This is now redundant but kept for initial trade creation)*/
 function safeLog(trade, logEntry) {
     console.log(`[TRADE_LOG] Ref: ${trade.reference} - ${logEntry.message}`);
 }
-/**
- * Helper to resolve the provider-specific Wallet ID for a user and currency.
- */ 
+
+/** Helper to resolve the provider-specific Wallet ID for a user and currency. */ 
 async function resolveUserWalletId(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId); 
@@ -628,9 +623,8 @@ async function resolveUserWalletId(userId, currency) {
     }
     return wallet.externalWalletId;
 }
-/**
- * Helper to resolve the external crypto address for a user and currency.
- */
+
+/* Helper to resolve the external crypto address for a user and currency. */
 async function resolveUserCryptoAddress(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId);
@@ -651,49 +645,29 @@ async function resolveUserCryptoAddress(userId, currency) {
     }
     return wallet.walletAddress;
 }
-// ----------------------------------------------------
 
-// async function updateTradeStatusAndLog(...) { /* ... */ }
+// NEW helper to calculate fees and gross escrow amount
+// async function calculatePercentageFee(currencyTarget, amountTarget) {
+//   const feeConfig = await FeeConfig.findOne({ currency: currencyTarget }).lean();
 
+//   if (!feeConfig) {
+//     throw new TradeError(`Fee config missing for ${currencyTarget}`, 500);
+//   }
 
-/**
- * @name performEscrow
- * @description Isolates the external API call and handles immediate failure.
- * @throws {TradeError} If the provider API initiation fails.
- */
-// async function performEscrow(trade, sourceWalletId, masterCryptoAddress, actorId, ip, role) {
-//     const transferResult = await blockrader.transferFunds(
-//         sourceWalletId,
-//         blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-//         trade.amountTarget,
-//         trade.currencyTarget,
-//         masterCryptoAddress
-//     );
+//   const feePercentage = Number(feeConfig.feePercentage);
+//   const feeAmount = Number(((amountTarget * feePercentage) / 100).toFixed(6));
+//   const buyerReceives = Number((amountTarget - feeAmount).toFixed(6));
 
-//     // CRITICAL CHECK
-//     if (!transferResult || !transferResult.data || !transferResult.data.id) {
-//         const errorMessage = `Failed to escrow funds. Provider response: ${JSON.stringify(transferResult)}`;
-//         console.error(errorMessage);
-        
-//         // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-//         await updateTradeStatusAndLogSafe(
-//             trade._id,
-//             ALLOWED_STATES.FAILED,
-//             { 
-//                 message: `Escrow attempt failed at provider API: ${errorMessage}`, 
-//                 actor: null, // 'system' actor is now null (ObjectId)
-//                 role: 'system', 
-//                 ip 
-//             }
-//         );
-//         throw new TradeError("Failed to initiate escrow transfer: Provider API initiation failed.");
-//     }
+//   if (buyerReceives <= 0) {
+//     throw new TradeError("Fee exceeds trade amount", 400);
+//   }
 
-//     return transferResult;
+//   return {
+//     feePercentage,
+//     feeAmount,
+//     buyerReceives
+//   };
 // }
-
-
-
 
 // --------- Service functions ----------
 module.exports = {
@@ -744,162 +718,253 @@ async getAllUserWalletBalances(userId) {
             });
         }
     }
-
     // 3. Save into Redis cache
     await setCache(cacheKey, results, CACHE_TTL);
-
     return results;
 },
 
-   async initiateTrade(buyerId, merchantAd, data, ip = null) {
-        await checkUser(buyerId);
-        await checkUser(merchantAd.userId);
+// 
+async initiateTrade(buyerId, merchantAd, data, ip = null) {
+  await checkUser(buyerId);
+  await checkUser(merchantAd.userId);
 
-        // 🛑 REMOVED: Old non-atomic liquidity deduction. It will now be done atomically inside the transaction.
+  // 1️⃣ Validate time limit
+  if (!data.timeLimit || isNaN(data.timeLimit)) {
+    throw new Error("Merchant ad timeLimit is missing or invalid");
+  }
 
-        // ✅ 1. Validate the time limit
-        if (!data.timeLimit || isNaN(data.timeLimit)) {
-            throw new Error("Merchant ad timeLimit is missing or invalid");
-        }
+  const expiresAt = new Date(Date.now() + Number(data.timeLimit) * 60 * 1000);
 
-        // ✅ 2. Calculate expiration time
-        const expiresAt = new Date(Date.now() + Number(data.timeLimit) * 60 * 1000);
-        console.log("Trade expires at:", expiresAt);
-        const tradeAmount = data.amountSource; // Define for clarity
+  // ---------- LIMIT & UNIT VALIDATION ----------
+  const fiatAmount = Number(data.amountSource);
 
-        // ----------------------------------------------
-        // TRANSACTION SECTION
-        // ----------------------------------------------
-        const session = await mongoose.startSession();
-        session.startTransaction();
-        let trade;
-        let adUpdateResult;
- 
-        try {
-            // CRITICAL FIX: 3. Atomically deduct liquidity within the transaction.
-            // This ensures atomicity with the trade creation and acts as a concurrent availability check.
-            adUpdateResult = await MerchantAd.findOneAndUpdate(
-                {
-                    _id: merchantAd._id, // Use the ad's ID for the update
-                    availableAmount: { $gte: tradeAmount } // Ensure funds are available
-                },
-                { 
-                    $inc: { availableAmount: -tradeAmount }, // ATOMICALLY deduct the amount
-                    // Optional: $set: { updatedAt: new Date() } 
-                },
-                { new: true, session } // IMPORTANT: Pass the session
-            );
+  if (fiatAmount < merchantAd.minLimit) {
+    throw new TradeError("Amount below minimum trade limit");
+  }
 
-            if (!adUpdateResult) {
-                // If update fails, it means funds were insufficient (due to $gte check) or the ad was not found/available.
-                throw new Error("Insufficient liquidity or merchant ad not found/active.", 409); 
-            }
+  if (fiatAmount > merchantAd.maxLimit) {
+    throw new TradeError("Amount exceeds maximum trade limit");
+  }
 
-            // 4. Create initial P2PTrade DB record (using the same session)
-            const tradeDoc = await P2PTrade.create(
-                [
-                    {
-                        reference: `${data.reference || `REF_${Date.now()}`}`,
-                        userId: buyerId,
-                        merchantId: merchantAd.userId,
-                        merchantAdId: merchantAd._id,
-                        amountSource: data.amountSource,
-                        amountTarget: data.amountTarget,
-                        currencySource: data.currencySource,
-                        currencyTarget: data.currencyTarget,
-                        rate: data.rate || 1,
-                        provider: "BLOCKRADAR",
-                        status: "PENDING_PAYMENT",
-                        expiresAt,
-                        logs: []
-                    }
-                ],
-                { session }
-            );
+  // 2️⃣ Convert fiat → crypto (listing price)
+  const cryptoAmount = fiatAmount / merchantAd.price;
 
-            trade = tradeDoc[0];
+  // 3️⃣ Liquidity check
+  if (cryptoAmount > merchantAd.availableAmount) {
+    throw new TradeError("Insufficient ad liquidity");
+  }
 
-            // Add initial log
-            safeLog(trade, {
-                message: "Trade created. Awaiting buyer payment.",
-                actor: buyerId,
-                role: "buyer",
-                ip,
-                time: new Date(),
-            });
+  // ==============================
+  // 🔥 CRYPTO-BASED PLATFORM FEE
+  // ==============================
+  const platformFeeCrypto = merchantAd.platformFeeCrypto;
 
-            // Note: trade.save({ session }) is redundant after P2PTrade.create([...], {session}) and is removed.
-            await session.commitTransaction();
-        } catch (err) {
-            await session.abortTransaction();
-            // Handle specific errors for clearer response
-            if (err.message.includes("Insufficient liquidity")) {
-                 // Re-throw the specific error for amount check
-                 throw new Error("Amount exceeds available liquidity.");
-            }
-            throw err;
-        } finally {
-            session.endSession();
-        }
+  if (!platformFeeCrypto || platformFeeCrypto <= 0) {
+    throw new TradeError("Platform fee not configured for this ad");
+  }
 
-        return await P2PTrade.findById(trade._id).lean();
-    },
+  if (platformFeeCrypto >= cryptoAmount) {
+    throw new TradeError("Platform fee exceeds or equals trade amount");
+  }
 
-    async confirmBuyerPayment(reference, buyerId, ip = null) {
-        if (!reference) throw new TradeError("Reference required");
+  const netCryptoAmount = cryptoAmount - platformFeeCrypto;
 
-        const trade = await P2PTrade.findOne({ reference });
-        if (!trade) throw new TradeError("Trade not found", 404);
+  // 5️⃣ Reference
+  const reference = data.reference || `P2P-${Date.now()}`;
 
-        // --- GUARDS ---
-        if (trade.userId.toString() !== buyerId.toString()) {
-            throw new TradeError("Unauthorized: Only the buyer can confirm payment.", 403);
-        }
-        if (trade.status !== ALLOWED_STATES.INIT) {
-            throw new TradeError(`Cannot confirm payment. Trade is currently in status: ${trade.status}.`, 409);
-        }
-        // --- END GUARDS ---
-        
-        const merchantWalletId = await resolveUserWalletId(trade.merchantId, trade.currencyTarget);
-        const masterWalletCryptoAddress = blockrader.ESCROW_DESTINATION_ADDRESS;
+  // ---------- TRANSACTION ----------
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-        if (!masterWalletCryptoAddress) {
-            throw new TradeError("FATAL: MASTER_WALLET_ADDRESS is missing in environment variables for escrow.");
-        }
+  let trade;
 
-        const transferResult = await blockrader.transferFunds(
-            merchantWalletId,
-            blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-            trade.amountTarget,
-            trade.currencyTarget,
-            masterWalletCryptoAddress
-        );
+  try {
+    // 6️⃣ Atomic liquidity deduction
+    const adUpdateResult = await MerchantAd.findOneAndUpdate(
+      {
+        _id: merchantAd._id,
+        availableAmount: { $gte: cryptoAmount }
+      },
+      {
+        $inc: { availableAmount: -cryptoAmount }
+      },
+      { new: true, session }
+    );
 
-        if (!transferResult || !transferResult.data || !transferResult.data.id) {
-            const errorMessage = `Failed to escrow merchant funds. Provider response: ${JSON.stringify(transferResult)}`;
-            console.error(errorMessage);
-            throw new TradeError("Failed to initiate merchant escrow: Provider API initiation failed.");
-        }
+    if (!adUpdateResult) {
+      throw new Error("Insufficient liquidity or merchant ad not found.");
+    }
 
-        const txId = transferResult.data.id || transferResult.txId || "n/a";
+    // 7️⃣ Create trade (LOCK VALUES)
+    const tradeDoc = await P2PTrade.create(
+      [{
+        reference,
+        userId: buyerId,
+        merchantId: merchantAd.userId,
+        merchantAdId: merchantAd._id,
 
-        // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-        const updatedTrade = await updateTradeStatusAndLogSafe(
-            trade._id,
-            ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
-            {
-                message: `Buyer confirmed payment; merchant asset escrow initiated (tx:${txId}). Awaiting provider confirmation.`,
-                actor: buyerId,
-                role: "buyer",
-                ip,
-            },
-            ALLOWED_STATES.INIT // Ensure we are only updating from INIT state
-        );
+        side: merchantAd.type === "SELL" ? "BUY" : "SELL",
 
-        // ❗ Invalidate merchant balance cache after escrow deduction
-        await redisClient.del(`balances:${trade.merchantId}`);
-        return updatedTrade;
-    },
+        amountFiat: fiatAmount,
+
+        amountCrypto: cryptoAmount,          // 🔒 GROSS
+        platformFeeCrypto,                  // 🔒 PLATFORM FEE
+        netCryptoAmount,                    // 🔒 NET TO RECEIVER
+
+        marketRate: merchantAd.rawPrice,
+        listingRate: merchantAd.price,
+
+        currencySource: data.currencySource,
+        currencyTarget: data.currencyTarget,
+
+        provider: "BLOCKRADAR",
+        status: ALLOWED_STATES.INIT,
+        expiresAt
+      }],
+      { session }
+    );
+
+    trade = tradeDoc[0];
+
+    // 8️⃣ Initial audit log
+    safeLog(trade, {
+      message: "Trade created. Awaiting buyer payment.",
+      actor: buyerId,
+      role: "buyer",
+      ip,
+      time: new Date()
+    });
+
+    await session.commitTransaction();
+  } catch (err) {
+    await session.abortTransaction();
+    throw err;
+  } finally {
+    session.endSession();
+  }
+
+  return await P2PTrade.findById(trade._id).lean();
+},
+
+   async confirmBuyerPayment(reference, buyerId, ip = null) {
+  if (!reference) throw new TradeError("Reference required");
+
+  const trade = await P2PTrade.findOne({ reference });
+  if (!trade) throw new TradeError("Trade not found", 404);
+
+  // Only buyer can confirm payment
+  if (trade.userId.toString() !== buyerId.toString()) {
+    throw new TradeError("Only the buyer can confirm payment", 403);
+  }
+
+  // Status guard
+  if (trade.status !== ALLOWED_STATES.INIT) {
+    throw new TradeError(
+      `Cannot confirm payment in status: ${trade.status}`,
+      409
+    );
+  }
+
+  /**
+   * 🔑 CRITICAL FIX
+   * Determine who ACTUALLY owns the crypto being escrowed
+   *
+   * BUY  → Merchant is selling crypto → Merchant escrows
+   * SELL → User is selling crypto     → User escrows
+   */
+  const escrowSourceUserId =
+    trade.side === "BUY" ? trade.merchantId : trade.userId;
+
+  const sourceWalletId = await resolveUserWalletId(
+    escrowSourceUserId,
+    trade.currencyTarget
+  );
+
+  // Escrow FULL GROSS amount (fees are handled at settlement)
+  const escrowAmount = trade.amountCrypto;
+
+  let escrowTxId = null;
+
+  try {
+    // =========================
+    // 1️⃣ EXTERNAL ESCROW
+    // =========================
+ const transferResult = await blockrader.withdrawExternal(
+  sourceWalletId,                         // 1. sourceAddressId
+  blockrader.ESCROW_DESTINATION_ADDRESS,  // 2. toCryptoAddress (The 0x... address)
+  escrowAmount,                           // 3. amount
+  trade.currencyTarget,                   // 4. currency (e.g., "USDC")
+  `${trade.reference}-ESCROW`             // 5. idempotencyKey
+);
+
+    if (!transferResult) {
+      throw new TradeError("Escrow transfer failed at provider");
+    }
+
+    escrowTxId =
+      transferResult?.data?.id ||
+      transferResult?.txId ||
+      transferResult?.id ||
+      "n/a";
+
+    // =========================
+    // 2️⃣ ATOMIC DB UPDATE
+    // =========================
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      const updatedTrade = await updateTradeStatusAndLogSafe(
+        trade._id,
+        ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
+        {
+          message: `Buyer confirmed payment. Crypto escrowed (tx: ${escrowTxId}).`,
+          actor: buyerId,
+          role: "buyer",
+          ip
+        },
+        trade.status,
+        session
+      );
+
+      await session.commitTransaction();
+
+      // Optional cache invalidation
+      await redisClient.del(`balances:${escrowSourceUserId}`);
+
+      return updatedTrade;
+    } catch (dbError) {
+      await session.abortTransaction();
+
+      // 🔥 IMPORTANT: Provider succeeded but DB failed
+      console.error(
+        `CRITICAL: Escrow sent but DB update failed. EscrowTx=${escrowTxId}, Trade=${trade.reference}`
+      );
+
+      throw new TradeError(
+        "Payment confirmed but database update failed. Manual reconciliation required.",
+        500
+      );
+    } finally {
+      session.endSession();
+    }
+  } catch (error) {
+    // =========================
+    // 3️⃣ FAIL-SAFE LOGGING
+    // =========================
+    await updateTradeStatusAndLogSafe(
+      trade._id,
+      ALLOWED_STATES.FAILED,
+      {
+        message: `confirmBuyerPayment failed: ${error.message}`,
+        role: "system",
+        ip
+      }
+    );
+
+    throw error;
+  }
+},
 
     async initiateMerchantPaymentConfirmation(reference, merchantId, ip = null) {
         if (!reference) throw new TradeError("Reference required");
@@ -928,226 +993,232 @@ async getAllUserWalletBalances(userId) {
         return { message: "Verification code sent to merchant's email. Awaiting OTP confirmation." };
     },
 
-    async confirmMerchantPayment(reference, merchantId, otpCode, ip = null) {
-        if (!reference || !otpCode) throw new TradeError("Reference and OTP code required");
+   async confirmMerchantPayment(reference, merchantId, otpCode, ip = null) {
+    if (!reference || !otpCode) throw new TradeError("Reference and OTP code required");
 
-        let trade = await P2PTrade.findOne({ reference });
-        if (!trade) throw new TradeError("Trade not found", 404);
+    const trade = await P2PTrade.findOne({ reference });
+    if (!trade) throw new TradeError("Trade not found", 404);
 
-        // --- GUARDS ---
-        if (trade.merchantId.toString() !== merchantId.toString()) {
-            throw new TradeError("Unauthorized: Only the merchant can confirm payment.", 403);
+    // --- GUARDS ---
+    if (trade.merchantId.toString() !== merchantId.toString()) {
+        throw new TradeError("Unauthorized: Only the merchant can confirm payment.", 403);
+    }
+
+    const expectedStatus = ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER;
+    if (trade.status !== expectedStatus) {
+        throw new TradeError(
+            `Cannot confirm/settle. Trade is in status: ${trade.status}. Expected status: ${expectedStatus}.`,
+            409
+        );
+    }
+    // --- END GUARDS ---
+
+    // 🔑 OTP Verification
+    const isVerified = await verifyOtp(merchantId, otpCode, 'P2P_SETTLEMENT');
+    if (!isVerified) throw new TradeError("Invalid or expired OTP.", 401);
+
+    // Determine recipient based on trade side
+    const recipientAddress =
+        trade.side === 'BUY'
+            ? await resolveUserCryptoAddress(trade.userId, trade.currencyTarget)      // Buyer receives crypto
+            : await resolveUserCryptoAddress(trade.merchantId, trade.currencyTarget); // Merchant receives crypto
+
+    try {
+        // 1️⃣ External settlement: Master Wallet -> Recipient (net amount only)
+     const transferResult = await blockrader.transferFunds(
+    blockrader.BLOCKRADER_MASTER_WALLET_UUID, // Source (Master)
+    null,                                     // Destination ID (Not used for Master flows)
+    trade.netCryptoAmount,                    // Amount
+    trade.currencyTarget,                     // Currency (e.g., USDC)
+    recipientAddress,                         // The 0x... address of the recipient
+    `${trade.reference}-SETTLEMENT`           // Reference
+);
+
+        if (!transferResult || !transferResult.data?.id) {
+            const errorMessage = `Failed to release escrowed asset. Provider response: ${JSON.stringify(transferResult)}`;
+            console.error(errorMessage);
+            throw new TradeError("Settlement transfer initiation failed at provider.");
         }
 
-        const expectedStatus = ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER; 
+        const txId = transferResult.data.id || transferResult.txId || "n/a";
 
-        if (trade.status !== expectedStatus) {
-            throw new TradeError(`Cannot confirm/settle. Trade is in status: ${trade.status}. Expected status: ${expectedStatus}.`, 409);
-        }
-        // --- END GUARDS ---
-        
-        // 🔑 OTP Verification
-        const isVerified = await verifyOtp(merchantId, otpCode, 'P2P_SETTLEMENT');
-        
-        if (!isVerified) {
-            throw new TradeError("Invalid or expired OTP.", 401); 
-        }
-        // -----------------------------
-
-        let transferResult = null;
-
+        // 2️⃣ Atomic DB update
+        const session = await mongoose.startSession();
+        session.startTransaction();
         try {
-            // 1. Perform external settlement (Master -> Buyer)
-            const buyerDestinationId = await resolveUserWalletId(trade.userId, trade.currencyTarget);
-            const buyerCryptoAddress = await resolveUserCryptoAddress(trade.userId, trade.currencyTarget);
+            const settlementMessage = `Settlement initiated (tx:${txId}). Gross Escrow: ${trade.amountCrypto}. Net to recipient: ${trade.netCryptoAmount}. Platform Fee Retained: ${trade.platformFeeCrypto}. Awaiting webhook confirmation.`;
 
-            transferResult = await blockrader.transferFunds(
-                blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-                buyerDestinationId,
-                trade.amountTarget,
-                trade.currencyTarget,
-                buyerCryptoAddress
+            const updatedTrade = await updateTradeStatusAndLogSafe(
+                trade._id,
+                ALLOWED_STATES.COMPLETED,
+                {
+                    message: settlementMessage,
+                    actor: merchantId,
+                    role: "merchant",
+                    ip,
+                },
+                expectedStatus,
+                session
             );
 
-            // 2. Resolve Transaction ID robustly
-            const txId = transferResult?.data?.id || transferResult?.txId || transferResult?.id || "n/a";
-            
-            // 3. CRITICAL CHECK
-            if (!transferResult) {
-                const errorMessage = `Failed to release escrowed asset to recipient. Provider response: ${JSON.stringify(transferResult)}`;
-                console.error(errorMessage);
-                throw new TradeError("Settlement transfer initiation failed at provider, missing required data.");
-            }
-            
-            // 4. Start Mongoose Session for Atomic DB Update
-            const session = await mongoose.startSession();
-            session.startTransaction();
-            let updatedTrade;
+            await session.commitTransaction();
 
-            try {
-                // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-                updatedTrade = await updateTradeStatusAndLogSafe(
-                    trade._id,
-                    ALLOWED_STATES.COMPLETED,
-                    {
-                        message: `External settlement initiated (tx:${txId}). Awaiting webhook confirmation.`,
-                        actor: merchantId,
-                        role: "merchant",
-                        ip,
-                    },
-                    expectedStatus,
-                    session // Session is passed as the last argument
-                );
-                
-                await session.commitTransaction();
-                // ❗ Invalidate buyer balance cache after settlement credit
+            // Invalidate cache
+            if (trade.side === 'BUY') {
                 await redisClient.del(`balances:${trade.userId}`);
-
-            } catch (dbError) {
-                await session.abortTransaction();
-                console.error("CRITICAL: Settlement DB update failed after successful external transfer.", dbError);
-                throw new TradeError("Database update failed after successful external transfer initiation.");
-            } finally {
-                session.endSession();
+            } else {
+                await redisClient.del(`balances:${trade.merchantId}`);
             }
 
             return updatedTrade;
-
-        } catch (error) {
-            if (trade) {
-                // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-                await updateTradeStatusAndLogSafe(
-                    trade._id,
-                    ALLOWED_STATES.FAILED,
-                    {
-                        // Sanitized error message
-                        message: `Settlement failed during initiation: ${String(error?.message || error).trim()}`,
-                        actor: null, // 'system' actor is now null (ObjectId)
-                        role: 'system',
-                        ip,
-                    }
-                );
+        } catch (dbError) {
+            await session.abortTransaction();
+            console.error("CRITICAL: Settlement DB update failed after external transfer.", dbError);
+            throw new TradeError("Database update failed after settlement initiation.");
+        } finally {
+            session.endSession();
+        }
+    } catch (error) {
+        // Fail-safe logging
+        await updateTradeStatusAndLogSafe(
+            trade._id,
+            ALLOWED_STATES.FAILED,
+            {
+                message: `Settlement failed: ${String(error?.message || error)}`,
+                actor: null,
+                role: 'system',
+                ip,
             }
-            throw error;
+        );
+        throw error;
+    }
+},
+
+async cancelTrade(reference, userId, ip = null) {
+    if (!reference) throw new TradeError("Reference required");
+
+    const trade = await P2PTrade.findOne({ reference });
+    if (!trade) throw new TradeError("Trade not found", 404);
+
+    const user = await checkUser(userId);
+    const isAdmin = user.role === "admin";
+    const isBuyer = trade.userId.toString() === userId.toString();
+    const isMerchant = trade.merchantId.toString() === userId.toString();
+
+    // ----------------------------
+    // 1️⃣ Authorization check
+    // Buyer or Admin can cancel anytime.
+    // Merchant can only cancel after trade expires.
+    // ----------------------------
+    if (isMerchant && !isAdmin) {
+        const isExpired = new Date() > new Date(trade.expiresAt);
+        if (!isExpired) {
+            throw new TradeError("Merchant cannot cancel while trade is active. Wait for expiration or open a dispute.", 403);
         }
-    },
+    } else if (!isBuyer && !isAdmin) {
+        throw new TradeError("Not authorized to cancel this trade", 403);
+    }
 
-    async cancelTrade(reference, userId, ip = null) {
-        if (!reference) throw new TradeError("Reference required");
-        let trade = await P2PTrade.findOne({ reference });
-        if (!trade) throw new TradeError("Trade not found", 404);
+    // ----------------------------
+    // 2️⃣ Terminal states
+    // ----------------------------
+    const terminalStates = [
+        ALLOWED_STATES.COMPLETED,
+        ALLOWED_STATES.CANCELLED,
+        ALLOWED_STATES.CANCELLED_REVERSED,
+        ALLOWED_STATES.FAILED
+    ];
+    if (terminalStates.includes(trade.status)) {
+        throw new TradeError(`Trade is already in a final state: ${trade.status}`, 409);
+    }
 
-        const user = await checkUser(userId);
-        const isAdminUser = user.role === "admin";
+    const requiresEscrowReversal = trade.status === ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER;
+    let reversalTxId = null;
 
-        if (trade.userId.toString() !== userId.toString() && !isAdminUser) {
-            throw new TradeError("Not authorized to cancel this trade", 403);
+    try {
+        // ----------------------------
+        // 3️⃣ Handle Escrow Reversal
+        // - Scenario B (User sells)
+        // - Full gross amount
+        // ----------------------------
+        if (requiresEscrowReversal) {
+            const refundRecipientId = trade.side === 'BUY' ? trade.merchantId : trade.userId;
+            const sourceCurrency = trade.currencyTarget;
+
+            // Full gross escrow includes platform fee
+            const refundAmount = trade.amountCrypto;
+
+            const destinationWalletId = await resolveUserWalletId(refundRecipientId, sourceCurrency);
+            const destinationAddress = await resolveUserCryptoAddress(refundRecipientId, sourceCurrency);
+
+            const transferResult = await blockrader.transferFunds(
+                blockrader.BLOCKRADER_MASTER_WALLET_UUID,
+                destinationWalletId,
+                refundAmount,
+                sourceCurrency,
+                destinationAddress,
+                `${trade.reference}-REVERSAL`
+            );
+
+            if (!transferResult) throw new TradeError("Escrow reversal failed at provider");
+            reversalTxId = transferResult?.data?.id || transferResult?.txId || "n/a";
         }
 
-        if ([ALLOWED_STATES.COMPLETED, ALLOWED_STATES.CANCELLED_REVERSED, ALLOWED_STATES.FAILED].includes(trade.status)) {
-            throw new TradeError(`Cannot cancel a trade in status: ${trade.status}`, 409);
-        }
-
-        let reversalType = null;
-        let sourceCurrency = null;
-        let sourceDestinationId = null;
-        let sourceCryptoAddress = null;
-        let sourceAmount = null;
-
+        // ----------------------------
+        // 4️⃣ Atomic DB operations
+        // ----------------------------
+        const session = await mongoose.startSession();
+        session.startTransaction();
         try {
-            // 1. Determine reversal details
-            if (trade.status === ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER) {
-                sourceCurrency = trade.currencyTarget;
-                sourceAmount = trade.amountTarget;
-                sourceDestinationId = await resolveUserWalletId(trade.merchantId, sourceCurrency);
-                sourceCryptoAddress = await resolveUserCryptoAddress(trade.merchantId, sourceCurrency);
-                reversalType = 'Escrow (Merchant)';
-            }
-            
-            // 2. Perform external reversal
-            if (reversalType) {
-                const transferResult = await blockrader.transferFunds(
-                    blockrader.BLOCKRADER_MASTER_WALLET_UUID, 
-                    sourceDestinationId, 
-                    sourceAmount,
-                    sourceCurrency,
-                    sourceCryptoAddress 
-                );
+            // Restore merchant ad liquidity
+            await MerchantAd.findByIdAndUpdate(
+                trade.merchantAdId,
+                { $inc: { availableAmount: trade.amountCrypto } },
+                { session }
+            );
 
-                const txId = transferResult?.data?.id || transferResult?.txId || transferResult?.id || "n/a";
+            const newStatus = requiresEscrowReversal ? ALLOWED_STATES.CANCELLED_REVERSED : ALLOWED_STATES.CANCELLED;
 
-                if (!transferResult) {
-                    const errorMessage = `${reversalType} reversal failed at provider. Provider response: ${JSON.stringify(transferResult)}`;
-                    console.error(errorMessage);
-                    throw new TradeError(`Escrow reversal failed at provider for ${reversalType}, missing required data.`);
-                }
-
-                // 3. Start Mongoose Session for Atomic DB Update
-                const session = await mongoose.startSession();
-                session.startTransaction();
-                let updatedTrade;
-
-                try {
-                    // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-                    updatedTrade = await updateTradeStatusAndLogSafe(
-                        trade._id,
-                        ALLOWED_STATES.CANCELLED_REVERSED,
-                        {
-                            message: `${reversalType} reversed (tx:${txId}).`,
-                            actor: userId,
-                            role: isAdminUser ? 'admin' : 'requester',
-                            ip,
-                        },
-                        trade.status, 
-                        session 
-                    );
-                    
-                    await session.commitTransaction();
-                    
-                  // ❗ Invalidate merchant balance cache after escrow reversal
-                   await redisClient.del(`balances:${trade.merchantId}`);
-
-                    return updatedTrade;
-                } catch (dbError) {
-                    await session.abortTransaction();
-                    console.error("CRITICAL: Reversal DB update failed after successful external reversal.", dbError);
-                    throw new TradeError("Database update failed after successful external reversal initiation.");
-                } finally {
-                    session.endSession();
-                }
-            }
-
-            // Fallthrough: Generic cancel if no reversal was needed (only if status is INIT)
-            // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-            return await updateTradeStatusAndLogSafe(
+            const updatedTrade = await updateTradeStatusAndLogSafe(
                 trade._id,
-                ALLOWED_STATES.CANCELLED,
+                newStatus,
                 {
-                    message: "Trade cancelled (no reversal needed/possible).",
+                    message: `Cancelled by ${isAdmin ? 'Admin' : isBuyer ? 'Buyer' : 'Merchant'}. ${reversalTxId ? `Escrow reversed (tx: ${reversalTxId})` : ''}`,
                     actor: userId,
-                    role: isAdminUser ? 'admin' : 'requester',
-                    ip,
+                    role: isAdmin ? "admin" : isBuyer ? "buyer" : "merchant",
+                    ip
                 },
-                trade.status
+                trade.status,
+                session
             );
 
-        } catch (error) {
-            // If reversal fails, we mark the trade as FAILED and log the error.
-            // 🚀 REPLACED: updateTradeStatusAndLog -> updateTradeStatusAndLogSafe
-            await updateTradeStatusAndLogSafe(
-                trade._id,
-                ALLOWED_STATES.FAILED,
-                {
-                    message: `Cancellation/Reversal failed: ${String(error?.message || error).trim()}`,
-                    actor: null, // 'system' actor is now null (ObjectId)
-                    role: 'system',
-                    ip,
-                }
-            );
-            throw error;
+            await session.commitTransaction();
+
+            // Invalidate caches for both buyer and merchant
+            await redisClient.del(`balances:${trade.merchantId}`);
+            await redisClient.del(`balances:${trade.userId}`);
+
+            return updatedTrade;
+        } catch (dbError) {
+            await session.abortTransaction();
+            console.error(`DATABASE CRASH after reversal sent: ${reversalTxId}. Manual sync may be required for trade ${trade.reference}`);
+            throw dbError;
+        } finally {
+            session.endSession();
         }
-    },
-
+    } catch (error) {
+        // ----------------------------
+        // 5️⃣ Fail-safe
+        // ----------------------------
+        await updateTradeStatusAndLogSafe(trade._id, ALLOWED_STATES.FAILED, {
+            message: `Cancellation failed: ${error.message}`,
+            role: "system",
+            actor: null,
+            ip
+        });
+        throw error;
+    }
+},
     async getTradeByReference(reference) {
         return await P2PTrade.findOne({ reference }).populate("userId", "firstName email role").populate("merchantId", "firstName email role").lean();
     },
@@ -1165,4 +1236,4 @@ async getAllUserWalletBalances(userId) {
 
         return { trades, total, page, pageSize };
     }
-};
+};  

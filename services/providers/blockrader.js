@@ -369,8 +369,8 @@ async function getWalletBalance(externalWalletId, currency) {
           },
           { headers }
         );
-
-        console.log("[Blockrader] Child Wallet funding successful. Transaction ID:", data.transferId || data.id);
+const txId = data.data?.id || data.id; 
+console.log("[Blockrader] Child Wallet funding successful. Transaction ID:", txId);
         return data;
 
       } catch (error) {
@@ -485,20 +485,83 @@ async function getWalletBalance(externalWalletId, currency) {
       }
     }
 
+    // -----------------------------
+// 📈 NEW CORE FUNCTION: Get Total Transaction Volume (Handles Pagination)
+// -----------------------------
+/**
+ * Recursively fetches all successful transactions from the Master Wallet 
+ * and calculates the total volume, filtered by assets and transaction type.
+ * @param {('DEPOSIT'|'WITHDRAW')} type - The transaction type.
+ * @param {string[]} assets - Array of asset symbols (e.g., ['USDC', 'CNGN']).
+ * @param {number} [page=1] - Current page number for recursion (default 1).
+ * @param {number} [limit=100] - Number of items per page.
+ * @param {number} [totalVolume=0] - Running total volume for recursion.
+ * @returns {Promise<number>} The total successful transaction volume.
+ */
+async function getTotalTransactionVolume(type, assets, page = 1, limit = 100, totalVolume = 0) {
+    const context = `Get Total Volume (Type: ${type}, Assets: ${assets.join(', ')})`;
+    if (!BLOCKRADER_MASTER_WALLET_UUID) {
+        throw new Error("FATAL: Master Wallet UUID is missing for volume calculation.");
+    }
+    
+    // The assets query parameter expects a comma-separated string
+    const assetsString = assets.join(', '); 
+    
+    // Blockrader transactions endpoint for the Master Escrow Wallet
+    const url = `${BLOCKRADER_BASE_URL}/wallets/${BLOCKRADER_MASTER_WALLET_UUID}/transactions`;
+
+    try {
+        const response = await axios.get(url, { 
+            headers,
+            params: {
+                status: 'SUCCESS', 
+                type: type,
+                assets: assetsString,
+                page: page,
+                limit: limit // Fetch up to 100 per page to reduce calls
+            }
+        });
+
+        // 1. Sum transactions on the current page
+        const transactions = response.data?.data || [];
+        const currentPageVolume = transactions.reduce((sum, tx) => {
+            // Amount is a string, convert to float for summation
+            return sum + parseFloat(tx.amount || '0');
+        }, 0);
+
+        const currentTotal = totalVolume + currentPageVolume;
+
+        // 2. Check for pagination info
+        const totalPages = response.data?.analytics?.totalPages || 1;
+        
+        if (page < totalPages) {
+            // Recursively fetch the next page
+            return getTotalTransactionVolume(type, assets, page + 1, limit, currentTotal);
+        }
+
+        // 3. Return the final accumulated volume
+        return currentTotal;
+        
+    } catch (error) {
+        logBlockraderError(context, error);
+        throw new Error(`Failed to fetch total transaction volume from Blockrader: ${error.message}`);
+    }
+}
+
     module.exports = {
         createWalletRecord,
         getOrCreateStablecoinAddress,
         createStablecoinAddress,
         createVirtualAccountForChildAddress,
         createVirtualAccountIfMissing,
-        
+        getTotalTransactionVolume,
         getUserAddressId,    
         fundChildWallet, 
         transferFunds, 
         getAssetId,
         getTransferFee,  
         getWalletBalance,
-        withdrawFromBlockrader,  
+        withdrawExternal: withdrawFromBlockrader,  
         BLOCKRADER_MASTER_WALLET_UUID,  
         ESCROW_DESTINATION_ADDRESS,
     BLOCKRADER_CNGN_ASSET_ID,  

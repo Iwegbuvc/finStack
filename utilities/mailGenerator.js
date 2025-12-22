@@ -397,5 +397,59 @@ const generatePasswordResetMail = (firstName) => {
 </html>
     `
 }
+// Add this new function along with your existing mail generator functions
 
-module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail};
+const generateAnnouncementMail = (title, body, firstName = 'User') => {
+    // Reusing the existing email structure (Header, Footer, styles) for consistency
+    return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Announcement: ${title}</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f5f5f5; color: #333;">
+        <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; margin: 20px auto;">
+            <tr>
+                <td style="background-color: #2F67FA; padding: 20px; text-align: center;">
+                    <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Finstack Announcement</h1>
+                </td>
+            </tr>
+            
+            <tr>
+                <td style="background-color: #ffffff; padding: 30px;">
+                    <h2 style="color: #2F67FA; margin: 0 0 20px 0; font-size: 24px;">${title}</h2>
+                    
+                    <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 16px;">
+                        Hello ${firstName || 'User'},
+                    </p>
+                    
+                    <div style="line-height: 1.6; margin: 0 0 20px 0; font-size: 16px; border-left: 4px solid #2F67FA; padding-left: 15px;">
+                        ${body}
+                    </div>
+
+                    <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 14px; color: #666;">
+                        Thank you for being a part of the Finstack community.
+                    </p>
+                </td>
+            </tr>
+            
+            <tr>
+                <td style="background-color: #ffffff; padding: 20px; text-align: center; border-top: 1px solid #eee;">
+                    <p style="margin: 0 0 10px 0; font-size: 14px;">
+                        Need help? Reach out at <a href="mailto:support@Finstack.com" style="color: #2F67FA;">support@Finstack.com</a>
+                    </p>
+                    <p style="margin: 0; font-size: 12px; color: #777;">
+                        © ${new Date().getFullYear()} Finstack. All rights reserved.
+                    </p>
+                </td>
+            </tr>
+        </table>
+    </body>
+    </html>
+    `;
+};
+
+
+module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail};

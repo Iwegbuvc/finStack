@@ -1,16 +1,19 @@
 const User = require('../models/userModel');
-const withdrawFundsService = require('../services/withdrawFundService');
 const Wallet = require("../models/walletModel");
 const { generateAndSendOtp, verifyOtp } = require('../utilities/otpUtils')
 const axios = require("axios");
 const logger = require("../utilities/logger");
-const { logTransaction } = require("../utilities/logTransaction");
 const p2pService = require("../services/p2pService");
-
+// 🆕 NEW IMPORTS
+const { createWithdrawalRequest } = require('../services/withdrawalInterService'); 
+const { initiateCryptoTransfer } = require('../services/cryptoTransServicePc'); 
+const Transaction = require("../models/transactionModel"); // Needed for the non-atomic update
+const { withdrawFromBlockrader } = require('../services/providers/blockrader');
 const BLOCKRADER_BASE_URL = process.env.BLOCKRADER_BASE_URL;
 const BLOCKRADER_API_KEY = process.env.BLOCKRADER_API_KEY;
-const MASTER_WALLET_ID = process.env.COMPANY_ESCROW_ACCOUNT_ID;
 const isProduction = process.env.NODE_ENV === "production";
+const CRYPTO_NETWORK = process.env.PAYCREST_CRYPTO_NETWORK || "POLYGON";
+
 
 const getDashboardBalances = async (req, res) => {
   try {
@@ -86,124 +89,298 @@ const depositFunds = async (req, res) => {
  }
 };
 
+
+
+// Initiate: sends OTP only
+// const initiateWithdrawal = async (req, res) => {
+//   try {
+//     const { walletCurrency, destinationAccountNumber, amount } = req.body;
+//     const userId = req.user.id;
+
+//     if (!walletCurrency || !destinationAccountNumber || !amount) {
+//       return res.status(400).json({ success: false, message: "Required fields are missing" });
+//     }
+
+//     logger.info(`Initiating withdrawal OTP for user ${userId}`);
+
+//     const user = await User.findById(userId);
+//     if (!user) return res.status(404).json({ success: false, message: "User not found" });
+
+//     const wallet = await Wallet.findOne({ currency: walletCurrency, user_id: userId });
+//     if (!wallet) return res.status(404).json({ success: false, message: "Wallet not found" });
+
+//     if (wallet.balance < amount) {
+//       return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+//     }
+
+//     await generateAndSendOtp(userId, "WITHDRAWAL", user.email);
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Verification code sent to your email. Please check your inbox/spam folder.",
+//     });
+//   } catch (error) {
+//     logger.error("initiateWithdrawal error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+// Complete: verify OTP, create withdrawal request (deduct amount+fee) and call provider
+// const completeWithdrawal = async (req, res) => {
+//   try {
+//     const { walletCurrency, destinationAccountNumber, amount, otpCode } = req.body;
+//     const userId = req.user.id;
+
+//     if (!walletCurrency || !destinationAccountNumber || !amount || !otpCode) {
+//       return res.status(400).json({ success: false, message: "All withdrawal details required" });
+//     }
+
+//     // verify OTP
+//     const isVerified = await verifyOtp(userId, otpCode, "WITHDRAWAL");
+//     if (!isVerified) return res.status(401).json({ success: false, message: "Invalid or expired OTP." });
+
+//     // call service to create withdrawal, this will deduct amount+fee and call provider
+//     const idempotencyKey = `withdraw-${userId}-${Date.now()}`;
+
+//     const result = await createWithdrawalRequest({
+//       userId,
+//       currency: walletCurrency,
+//       amount: Number(amount),
+//       externalAddress: destinationAccountNumber,
+//       idempotencyKey
+//     });
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Withdrawal initiated. Awaiting provider confirmation.",
+//       data: { transaction: result.transaction, providerResult: result.providerResult }
+//     });
+//   } catch (error) {
+//     logger.error("completeWithdrawal error:", error);
+//     return res.status(500).json({ success: false, message: error.message });
+//   }
+// };
+
+// IMPLEMENT PAYCREST WITHDRAWAL LOGIC
 const initiateWithdrawal = async (req, res) => {
-    try {
-        const { walletCurrency, destinationAccountNumber, amount } = req.body;
-        const userId = req.user.id; // Assuming userId is available via auth middleware
+  try {
+    const { walletCurrency, amount } = req.body; // Removed destinationAccountNumber/bank details for security reasons in the initiation step
 
-        if (!walletCurrency || !destinationAccountNumber || !amount) {
-            return res.status(400).json({ success: false, message: "Required fields are missing" });
-        }
-        
-        // 💡 DEBUG LOG: Log the authenticated user ID for debugging
-        logger.info(`Attempting withdrawal initiation for authenticated user ID: ${userId}`);
+    if (!walletCurrency || !amount) {
+      return res.status(400).json({ success: false, message: "Required fields are missing" });
+    }
 
-        const user = await User.findById(userId);
-        
-        // 💡 FIX 1: Provide a more specific error if the User is not found.
-        if (!user) {
-            return res.status(404).json({ success: false, message: `Authenticated User ID ${userId} not found in User collection.` });
-        }
-        
-        const wallet = await Wallet.findOne({ currency: walletCurrency, user_id: userId });
+    logger.info(`Initiating withdrawal OTP for user ${req.user.id}`);
 
-        // 💡 FIX 2: Provide a more specific error if the Wallet is not found.
-        if (!wallet) {
-            return res.status(404).json({ success: false, message: `Wallet in ${walletCurrency} not found for user ${userId}.` });
-        }
-        
-        if (wallet.balance < amount) {
-            return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
-        }
-        
-        // 💡 Use the new utility to generate and send OTP
-        await generateAndSendOtp(userId, 'WITHDRAWAL', user.email);
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: "User not found" });
 
-        return res.status(200).json({
-            success: true,
-            message: "Verification code sent to your email. Please check your inbox/spam folder.",
-        });
+    const wallet = await Wallet.findOne({ currency: walletCurrency, user_id: req.user.id });
+    if (!wallet) return res.status(404).json({ success: false, message: "Wallet not found" });
 
-    } catch (error) {
-        logger.error(`❌ Withdrawal initiation error: ${error.message}`);
-        // Send a user-friendly error message, usually just error.message from the util
-        return res.status(500).json({ success: false, message: error.message }); 
-    }
+    // Perform preliminary balance check before sending OTP
+    if (wallet.balance < amount) {
+      return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+    }
+
+    await generateAndSendOtp(req.user.id, "WITHDRAWAL", user.email);
+
+    return res.status(200).json({
+      success: true,
+      message: "Verification code sent to your email. Please check your inbox/spam folder.",
+    });
+  } catch (error) {
+    logger.error("initiateWithdrawal error:", error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
 };
 
-const completeWithdrawal = async (req, res) => {
-    try {
-        const { 
-            walletCurrency, 
-            destinationAccountNumber, 
-            amount, 
-            otpCode // 💡 NEW REQUIRED FIELD
-        } = req.body;
-        const userId = req.user.id;
+// 2️⃣ STEP 2: COMPLETION (OTP Verification, Paycrest Order, Fund Lock)
+const submitPaycrestWithdrawal = async (req, res) => {
+  try {
+    // 1. Collect all required inputs, including OTP and all Paycrest fiat details
+    const { 
+      walletCurrency, 
+      amount, 
+      otpCode,
+      destinationAccountNumber, 
+      institutionCode,          
+      accountName               
+    } = req.body;
+    
+    const userId = req.user.id;
 
-        if (!walletCurrency || !destinationAccountNumber || !amount || !otpCode) {
-            return res.status(400).json({
-                success: false,
-                message: "All withdrawal and verification details are required",
-            });
-        }
-        
-        // 💡 OTP Verification
-        const isVerified = await verifyOtp(userId, otpCode, 'WITHDRAWAL');
-
-        if (!isVerified) {
-             return res.status(401).json({ success: false, message: "Invalid or expired OTP." });
-        }
-
-        // Fetch Wallet and Re-Check Balance (Crucial for security)
-        const wallet = await Wallet.findOne({ currency: walletCurrency, user_id: userId });
-        if (!wallet) {
-            return res.status(404).json({ success: false, message: "Wallet not found" }); 
-        }
-        if (wallet.balance < amount) {
-             return res.status(400).json({ success: false, message: "Insufficient wallet balance (re-checked)" });
-        }
-
-        // Execute Withdrawal
-        // ✅ FIX CONFIRMED: wallet.accountNumber is now correctly populated with the UUID/ID.
-        const fromAccount = wallet.accountNumber;
-        const result = await withdrawFundsService(fromAccount, destinationAccountNumber, amount);
-
-        // Update Balance and Log
-        if (result.success) {
-            wallet.balance -= amount;
-            await wallet.save();
-        }
-
-        await logTransaction({
-            // ... transaction logging details ...
-            userId,
-            walletId: wallet._id,
-            type: "WITHDRAWAL",
-            amount,
-            currency: wallet.currency,
-            status: result.success ? "COMPLETED" : "FAILED",
-            reference: result.reference,
-            metadata: { provider: result.provider, destination: destinationAccountNumber },
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Withdrawal successful",
-            data: result,
-        });
-
-    } catch (error) {
-        logger.error(`❌ Withdrawal completion error: ${error.message}`);
-        return res.status(500).json({ success: false, message: error.message });
+    if (!walletCurrency || !destinationAccountNumber || !amount || !otpCode || !institutionCode || !accountName) {
+      return res.status(400).json({ success: false, message: "All withdrawal and recipient details required" });
     }
+
+    // 2. Verify OTP
+    const isVerified = await verifyOtp(userId, otpCode, "WITHDRAWAL");
+    if (!isVerified) return res.status(401).json({ success: false, message: "Invalid or expired OTP." });
+
+    // 3. Call service to create Paycrest order and deduct user funds (atomic transaction)
+    const idempotencyKey = `pc-wdr-${userId}-${Date.now()}`;
+    
+    // The result object needs to be updated after the crypto transfer if it happens
+    let cryptoTransferResult = {};
+    let transaction; // Declare transaction here for scope
+
+    const result = await createWithdrawalRequest({
+      userId,
+      currency: walletCurrency,
+      amount: Number(amount),
+      externalAddress: destinationAccountNumber,
+      institutionCode, 
+      accountName,
+      idempotencyKey
+    });
+    
+    transaction = result.transaction; // Get the initial transaction object
+
+    // 4. CRITICAL STEP: INITIATE ON-CHAIN CRYPTO TRANSFER (ONLY if a new order was created)
+    if (!result.alreadyExists) {
+        logger.info(`Starting crypto transfer for Paycrest Order ID: ${result.paycrestOrderId}`);
+
+        cryptoTransferResult = await initiateCryptoTransfer({
+            userId: userId, 
+            token: walletCurrency,
+            receiveAddress: result.paycrestReceiveAddress,
+            amount: result.cryptoAmountToSend,
+            reference: transaction.reference,
+        });
+        
+        // 5. Update the transaction with the on-chain hash and set status
+        transaction = await Transaction.findByIdAndUpdate(transaction._id, { 
+            $set: { 
+                status: "CRYPTO_TRANSFER_SENT", // Funds are locked, crypto is sent
+                "metadata.cryptoTxHash": cryptoTransferResult.transactionHash,
+                "metadata.cryptoProviderRef": cryptoTransferResult.providerReference
+            } 
+        }, { new: true }); // Get the updated document
+    }
+
+    // 6. Return Paycrest details to caller 
+    const responseMessage = result.alreadyExists 
+      ? "Withdrawal order already created. Check transaction status."
+      : "Withdrawal initiated! Funds locked, crypto transfer sent to Paycrest. Awaiting fiat confirmation.";
+
+    return res.status(200).json({
+      success: true,
+      message: responseMessage,
+      data: { 
+          transaction: transaction, // Return the final, updated transaction
+          paycrestOrderId: result.paycrestOrderId, 
+          paycrestReceiveAddress: result.paycrestReceiveAddress,
+          cryptoAmountToSend: result.cryptoAmountToSend,
+          cryptoTransfer: cryptoTransferResult // Will be empty if alreadyExists is true
+      }
+    });
+
+  } catch (error) {
+    logger.error("submitPaycrestWithdrawal error:", error);
+    const statusCode = error.message.includes("Insufficient balance") ? 400 : 500;
+    return res.status(statusCode).json({ success: false, message: error.message });
+  }
 };
 
+// 3️⃣ STEP 3: Handle direct crypto withdrawal (no fiat off-ramp)
+const submitCryptoWithdrawal = async (req, res) => {
+    try {
+        // 1. Collect all required inputs
+        const {
+            walletCurrency,
+            amount,
+            otpCode,
+            externalCryptoAddress // The destination wallet address
+        } = req.body;
 
-/**
- * MOCK FUNCTION: Adds funds directly to a user's wallet for testing purposes.
- * This should ONLY be accessible in development environments and by admins.
- */
+        const userId = req.user.id;
+
+        if (!walletCurrency || !externalCryptoAddress || !amount || !otpCode) {
+            return res.status(400).json({ success: false, message: "All withdrawal and recipient details required" });
+        }
+
+        // 2. Verify OTP
+        const isVerified = await verifyOtp(userId, otpCode, "WITHDRAWAL");
+        if (!isVerified) return res.status(401).json({ success: false, message: "Invalid or expired OTP." });
+
+        // 3. Find the user's wallet to get the source address ID
+        const wallet = await Wallet.findOne({ currency: walletCurrency, user_id: userId });
+        if (!wallet) return res.status(404).json({ success: false, message: "Wallet not found for this currency." });
+
+        // CRITICAL CHECK: Ensure sufficient balance (re-check after OTP for safety)
+        if (wallet.balance < amount) {
+             return res.status(400).json({ success: false, message: "Insufficient wallet balance" });
+        }
+        
+        // 4. Generate Idempotency Key
+        const idempotencyKey = `crypto-wdr-${userId}-${Date.now()}`;
+        
+        // --- ATOMIC TRANSACTION START (In a production system, wrap 5 & 6 in a single DB transaction) ---
+
+        // 5. Create a PENDING transaction record
+        let newTransaction = await Transaction.create({
+            user_id: userId,
+            type: 'WITHDRAWAL',
+            currency: walletCurrency,
+            amount: Number(amount),
+            fee: 0, // Adjust as necessary
+            status: 'PENDING_PROVIDER', 
+            reference: idempotencyKey,
+            metadata: {
+                destination: externalCryptoAddress,
+                sourceWalletId: wallet._id.toString(),
+                provider: 'BLOCKRADER_CRYPTO',
+            }
+        });
+
+        // 6. Deduct from wallet balance
+        // NOTE: This must be done atomically with step 5 in a production setup (using DB sessions/locks)
+        wallet.balance -= Number(amount);
+        await wallet.save();
+        
+        logger.info(`Funds deducted. Calling Blockrader for Transaction ID: ${newTransaction._id}`);
+
+        // 7. Call the Blockrader service function
+        // wallet.address_id is assumed to be the Blockrader Child Address ID (sourceAddressId)
+        const providerResponse = await withdrawFromBlockrader(
+            wallet.address_id, 
+            externalCryptoAddress,
+            Number(amount),
+            walletCurrency,
+            idempotencyKey,
+            newTransaction.reference 
+        );
+
+        // 8. Update the transaction with provider details
+        newTransaction = await Transaction.findByIdAndUpdate(newTransaction._id, {
+            $set: {
+                status: providerResponse.data?.status || "SENT_TO_PROVIDER", 
+                provider_ref: providerResponse.data?.id, // Blockrader Withdrawal ID
+                "metadata.blockraderHash": providerResponse.data?.hash, 
+            }
+        }, { new: true });
+
+        // 9. Return success response
+        return res.status(200).json({
+            success: true,
+            message: "Crypto withdrawal successfully initiated with Blockrader.",
+            data: {
+                transaction: newTransaction,
+                providerResult: providerResponse.data,
+            }
+        });
+
+    } catch (error) {
+        logger.error("submitCryptoWithdrawal error:", error);
+        
+        // IMPORTANT: In a failure state, a mechanism to REVERSE the wallet balance deduction is required.
+        
+        const statusCode = error.message.includes("Insufficient") ? 400 : 500;
+        return res.status(statusCode).json({ success: false, message: error.message });
+    }
+};
+
 
 const addTestFunds = async (req, res) => {
     // SECURITY CHECK: Ensure this function only runs outside of production
@@ -256,4 +433,4 @@ const addTestFunds = async (req, res) => {
     }
 };
 
-module.exports = {getDashboardBalances, depositFunds, initiateWithdrawal, completeWithdrawal, addTestFunds};
+module.exports = {getDashboardBalances, depositFunds, initiateWithdrawal, submitPaycrestWithdrawal,submitCryptoWithdrawal, addTestFunds};

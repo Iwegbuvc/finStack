@@ -3,10 +3,46 @@ const P2PTrade = require("../models/p2pModel");
 const User = require("../models/userModel");
 const Kyc = require("../models/kycModel");
 const Wallet = require("../models/walletModel");
+const FeeConfig = require("../models/feeConfigModel");
 const Transaction = require("../models/transactionModel");
-const { getOrCreateStablecoinAddress, createWalletRecord, createVirtualAccountIfMissing, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
+const Announcement = require('../models/announcementModel');
+const announcementQueue = require('../utilities/announcementQueue');
+const sanitizeHtml = require('../utilities/sanitizingHtml');
+const { getOrCreateStablecoinAddress, createWalletRecord, createVirtualAccountIfMissing,getTotalTransactionVolume, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
+const { setPlatformFees } = require("../services/adminFeeService");
 
 
+/* =========== ADMIN: Create Announcement and Send Mail =========== */
+const createAnnouncementAndSendMail = async (req, res) => {
+  const { title, body } = req.body;
+
+  if (!title || !body) {
+    return res.status(400).json({
+      success: false,
+      message: 'Title and body are required',
+    });
+  }
+
+  const cleanBody = sanitizeHtml(body);
+
+  const announcement = await Announcement.create({
+    title,
+    body: cleanBody,
+    createdBy: req.user._id,
+  });
+
+  await announcementQueue.add('sendAnnouncement', {
+    announcementId: announcement._id,
+    title,
+    body: cleanBody,
+  });
+
+  return res.status(202).json({
+    success: true,
+    message: 'Announcement queued for delivery',
+    announcementId: announcement._id,
+  });
+};
 /* ===========  ADMIN: Get All Users   =========== */
 const getAllUsers = async (req, res) => {
     try {
@@ -37,7 +73,39 @@ const getAllUsers = async (req, res) => {
         });
     }
 };
+/* =========== ADMIN: Get All Merchants =========== */
+const getAllMerchants = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
 
+        // Filter users by role: "merchant"
+        const filter = { role: "merchant" };
+
+        const users = await User.find(filter)
+            .select("name email phone role createdAt")
+            .skip(skip)
+            .limit(limit);
+
+        const totalUsers = await User.countDocuments(filter);
+
+        res.status(200).json({
+            success: true,
+            message: "Merchants fetched successfully",
+            page,
+            totalPages: Math.ceil(totalUsers / limit),
+            totalUsers,
+            users,
+        });
+    } catch (error) {
+        console.error("❌ Error fetching merchants:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
 // Update User Role (for admin) 
 const updateUserRole = async (req, res) => {
     try {
@@ -67,7 +135,6 @@ const updateUserRole = async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 }
-
 // --------------------- Admin Updates KYC ---------------------
 const adminUpdateKycStatus = async (req, res) => {
   const { id: kycId, status, rejectionReason } = req.body;
@@ -200,7 +267,6 @@ if (kycRecord.country?.toLowerCase() === "nigeria") {
     session.endSession();
   }
 };
-
 /* ===========  ADMIN: Get All KYC Records   =========== */
 const getAllKycRecords = async (req, res) => {
     try {
@@ -262,7 +328,6 @@ const getSingleKyc = async (req, res) => {
         });
     }
 };
-
 // =========== ADMIN: Fetch all transactions
 const getAllTransactions = async (req, res) => {
     try {
@@ -307,23 +372,85 @@ const getAllTransactions = async (req, res) => {
         });
     }
 };
-/**
- * 🧾 Get all P2P trades (with filters + pagination)
- * Example: /api/admin/trades?status=COMPLETED&page=1&limit=10
- */
+/* =========== ADMIN: Get Total Platform Volume =========== */
+const getPlatformVolume = async (req, res) => {
+    try {
+        const supportedAssets = ['USDC', 'CNGN'];
+
+        const depositVolume = await getTotalTransactionVolume('DEPOSIT', supportedAssets);
+        const withdrawVolume = await getTotalTransactionVolume('WITHDRAW', supportedAssets);
+
+        // --- Apply FIX 2: Rounding for display precision ---
+        const roundedDepositVolume = parseFloat(depositVolume.toFixed(8));
+        const roundedWithdrawVolume = parseFloat(withdrawVolume.toFixed(8));
+        const roundedTotalVolume = parseFloat((depositVolume + withdrawVolume).toFixed(8));
+        // ----------------------------------------------------
+
+        res.status(200).json({
+            success: true,
+            message: "Platform volume data fetched successfully",
+            data: {
+                depositVolume: roundedDepositVolume, 
+                withdrawVolume: roundedWithdrawVolume, 
+                totalVolume: roundedTotalVolume, 
+                currencyScope: supportedAssets.join(' & ') 
+            }
+        });
+
+    }catch (error) {
+        console.error("❌ Error fetching platform volume:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch platform volume data",
+        });
+    }
+};
+const adminSetPlatformFees = async (req, res) => {
+try {
+const { usdcFee, cngnFee } = req.body;
+const adminId = req.user.id; // injected by auth middleware
+
+
+const result = await setPlatformFees({ usdcFee, cngnFee, adminId });
+res.json(result);
+} catch (err) {
+res.status(400).json({ error: err.message });
+}
+};
+// 🧾 Get all P2P trades (filters + pagination) Example: /api/admin/trades?status=COMPLETED&page=1&limit=10
 const getAllTrades = async (req, res) => {
     try {
-        let { status, userId, merchantId, startDate, endDate, page = 1, limit = 20 } = req.query;
+        let {
+            status,
+            userId,
+            merchantId,
+            startDate,
+            endDate,
+            page = 1,
+            limit = 20
+        } = req.query;
 
-        // Convert to numbers
-        page = parseInt(page);
-        limit = parseInt(limit);
+        // ✅ SAFELY PARSE & VALIDATE PAGINATION
+        page = Number(page);
+        limit = Number(limit);
 
-        // 🔍 Build filter
+        if (!Number.isInteger(page) || page < 1) page = 1;
+        if (!Number.isInteger(limit) || limit < 1 || limit > 100) limit = 20;
+
+        // 🔍 BUILD FILTER
         const filter = {};
-        if (status) filter.status = status.trim().toUpperCase();
-        if (userId) filter.userId = userId;
-        if (merchantId) filter.merchantId = merchantId;
+
+        if (status) {
+            filter.status = status.trim().toUpperCase();
+        }
+
+        if (userId) {
+            filter.userId = userId;
+        }
+
+        if (merchantId) {
+            filter.merchantId = merchantId;
+        }
 
         if (startDate || endDate) {
             filter.createdAt = {};
@@ -331,16 +458,17 @@ const getAllTrades = async (req, res) => {
             if (endDate) filter.createdAt.$lte = new Date(endDate);
         }
 
-        // 🧮 Count total trades for pagination
+        // 🧮 COUNT TOTAL (FOR PAGINATION)
         const totalTrades = await P2PTrade.countDocuments(filter);
 
-        // 📦 Fetch trades
+        // 📦 FETCH PAGINATED TRADES
         const trades = await P2PTrade.find(filter)
             .populate("userId", "name email role")
             .populate("merchantId", "name email role")
             .sort({ createdAt: -1 })
             .skip((page - 1) * limit)
-            .limit(limit);
+            .limit(limit)
+            .lean(); // 🚀 PERFORMANCE BOOST
 
         return res.status(200).json({
             success: true,
@@ -353,6 +481,7 @@ const getAllTrades = async (req, res) => {
             },
             data: trades,
         });
+
     } catch (error) {
         console.error("Error fetching trades:", error);
         return res.status(500).json({
@@ -363,10 +492,7 @@ const getAllTrades = async (req, res) => {
     }
 };
 
-/**
- * 🔎 Get detailed trade info with logs
- * Example: /api/admin/trades/REF_17290238901
- */
+//  * 🔎 Get detailed trade info with logs (Example: /api/admin/trades/REF_17290238901)*/
 const getTradeDetails = async (req, res) => {
     try {
         const { reference } = req.params;
@@ -398,4 +524,81 @@ const getTradeDetails = async (req, res) => {
     }
 };
 
-module.exports = {getAllUsers, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, getAllTransactions, getAllTrades, getTradeDetails};
+const getFeeSummary = async (req, res) => {
+    try {
+        const { currency, from, to } = req.query;
+
+        const filter = {};
+        if (currency) filter.currency = currency;
+        if (from || to) filter.createdAt = {};
+        if (from) filter.createdAt.$gte = new Date(from);
+        if (to) filter.createdAt.$lte = new Date(to);
+
+        const results = await FeeLog.aggregate([
+            { $match: filter },
+            {
+                $group: {
+                    _id: {
+                        currency: "$currency",
+                        type: "$type",
+                    },
+                    totalFees: { $sum: "$feeAmount" },
+                    totalPlatformFees: { $sum: "$platformFee" },
+                    totalNetworkFees: { $sum: "$networkFee" },
+                    count: { $sum: 1 }
+                }
+            },
+            { $sort: { "_id.currency": 1, "_id.type": 1 } }
+        ]);
+
+        res.status(200).json({
+            success: true,
+            message: "Fee summary fetched successfully",
+            data: results
+        });
+
+    } catch (error) {
+        console.error("❌ Error fetching fee summary:", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error",
+        });
+    }
+};
+// Update P2P FEES
+const updateFlatFee = async (req, res) => {
+  const { currency, flatFee } = req.body;
+
+  if (!currency || flatFee === undefined) {
+    return res.status(400).json({ message: "Currency and flatFee required" });
+  }
+
+  if (flatFee < 0) {
+    return res.status(400).json({ message: "Flat fee cannot be negative" });
+  }
+
+  const existing = await FeeConfig.findOne({ currency });
+
+  if (existing) {
+    await FeeHistory.create({
+      currency,
+      oldFee: existing.flatFee,
+      newFee: flatFee,
+      updatedBy: req.user.id
+    });
+
+    existing.flatFee = flatFee;
+    existing.updatedBy = req.user.id;
+    await existing.save();
+  } else {
+    await FeeConfig.create({
+      currency,
+      flatFee,
+      updatedBy: req.user.id
+    });
+  }
+
+  res.json({ success: true, message: "Flat fee updated successfully" });
+};
+
+module.exports = {createAnnouncementAndSendMail,getAllUsers,getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc,getPlatformVolume, getAllTransactions,adminSetPlatformFees, getAllTrades, getTradeDetails, getFeeSummary, updateFlatFee};

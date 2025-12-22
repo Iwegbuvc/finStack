@@ -36,6 +36,17 @@ const merchantAdSchema = new mongoose.Schema({
         required: true, 
         min: 0.01 
     }, 
+
+rawPrice: {
+  type: Number,
+  required: true
+},
+platformFeeCrypto: {
+  type: Number,
+  required: true,
+  min: 0
+},
+
 availableAmount: {
     type: Number,
     required: true,

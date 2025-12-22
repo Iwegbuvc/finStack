@@ -1,14 +1,18 @@
 const express = require("express");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc} = require("../controllers/adminController");
+const { createAnnouncementAndSendMail, updateFlatFee } = require('../controllers/adminController');
+const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, adminSetPlatformFees, getFeeSummary, getPlatformVolume} = require("../controllers/adminController");
 
 const router = express.Router();
 
+// 1a. NEW ROUTE: Create announcement and send mail to users
+router.post('/admin/announcements', verifyToken,isAdmin,createAnnouncementAndSendMail);
 // 1. FIX: Now uses the imported function updateUserRole directly
 router.put("/admin/update-user-role", verifyToken, isAdmin, updateUserRole);
-
 // 2. FIX: Now uses the imported function getAllUsers directly
 router.get("/admin/users", verifyToken, isAdmin, getAllUsers);
+// 2a. NEW ROUTE: Get all users with role 'merchant'
+router.get("/admin/merchants", verifyToken, isAdmin, getAllMerchants);
 
 // 3. FIX: Now uses the imported function adminUpdateKycStatus directly
 router.put("/admin/updateKyc", verifyToken, isAdmin, adminUpdateKycStatus);
@@ -19,6 +23,7 @@ router.get("/getSingleKyc/:id", verifyToken, getSingleKyc);
 // 5. FIX: Now uses the imported function getAllKycRecords directly
 router.get("/admin/getAllKycs", verifyToken, isAdmin, getAllKycRecords);
 
+router.post('/admin/setFees', verifyToken, isAdmin, adminSetPlatformFees);
 // Admin trade management 
 router.get("/admin/trades", verifyToken, isAdmin, getAllTrades);
 router.get("/admin/trades/:reference", verifyToken, isAdmin, getTradeDetails);
@@ -26,4 +31,10 @@ router.get("/admin/trades/:reference", verifyToken, isAdmin, getTradeDetails);
 // Admin only routes for transactions
 router.get("/admin/all-transaction", verifyToken, isAdmin, getAllTransactions);
 
+router.get("/admin/fees", verifyToken, isAdmin, getFeeSummary);
+
+router.post("/admin/updateCharges", verifyToken, isAdmin, updateFlatFee);
+
+// Admin route for total transaction volume
+router.get("/admin/volume", verifyToken, isAdmin, getPlatformVolume);
 module.exports = router;

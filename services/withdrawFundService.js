@@ -46,7 +46,7 @@ const withdrawFundsService = async (
         amount,
         narration,
       },
-      {
+      {timeout: 15000,
         headers: {
           Authorization: `Bearer ${PROVIDER_API_KEY}`,
           "Content-Type": "application/json",

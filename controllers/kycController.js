@@ -211,6 +211,8 @@ await KycAuditLog.create([{
 
 
 const submitKYC = async (req, res) => {
+    console.log("FILES RECEIVED:", Object.keys(req.files || {}));
+  console.log("FILES FULL:", req.files);
   if (!req.user || !req.user.id) {
     return res.status(401).json({ message: "Unauthorized: No user context found" });
   }
