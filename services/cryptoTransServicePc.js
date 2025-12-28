@@ -4,7 +4,7 @@ const { withdrawFromBlockrader, getUserAddressId } = require("./providers/blockr
 
 // Note: You may need a better way to get the network if it's not consistent
 // For Paycrest, we will assume a constant or pass it in.
-const CRYPTO_NETWORK = process.env.PAYCREST_CRYPTO_NETWORK || "POLYGON"; 
+const CRYPTO_NETWORK = process.env.PAYCREST_CRYPTO_NETWORK || "Base"; 
 
 /**
  * Initiates the actual on-chain crypto transfer to the Paycrest receive address 

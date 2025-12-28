@@ -1,11 +1,10 @@
     const axios = require("axios");
     const Wallet = require("../../models/walletModel");
-
+    
     // --- Environment Config ---
-    // Variables are safely accessed via process.env
     const BLOCKRADER_API_KEY = process.env.BLOCKRADER_API_KEY;
     const BLOCKRADER_BASE_URL = process.env.BLOCKRADER_BASE_URL; 
-    // Using the correct environment variable names from your .env file
+  
     const BLOCKRADER_MASTER_WALLET_UUID = process.env.COMPANY_ESCROW_ACCOUNT_ID;
     const BLOCKRADER_USD_ASSET_ID = process.env.BLOCKRADER_USD_ASSET_ID; 
     const BLOCKRADER_CNGN_ASSET_ID = process.env.BLOCKRADER_CNGN_ASSET_ID;

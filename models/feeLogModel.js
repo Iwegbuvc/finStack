@@ -1,3 +1,4 @@
+  // fee income from users
   const mongoose = require("mongoose");
 
   const FeeLogSchema = new mongoose.Schema({

@@ -1,41 +1,54 @@
 const FeeConfig = require('../models/feeConfigModel');
 const FeeHistory = require('../models/feeHistoryModel');
 
-async function setPlatformFees({ usdcFee, cngnFee, adminId }) {
-if (usdcFee < 0 || cngnFee < 0) {
-throw new Error('Fee cannot be negative');
+/**
+ * GETTER: Used by Transaction Handlers to find the fee
+ */
+async function getFlatFee(type, currency) {
+    const config = await FeeConfig.findOne({ type, currency });
+    return config ? config.feeAmount.toString() : "0";
 }
 
+async function setPlatformFees({ type, usdcFee, cngnFee, adminId }) {
 
-const existingFees = await FeeConfig.find({
-currency: { $in: ['USDC', 'cNGN'] }
-}).lean();
+    // 1. Validate action type
+    const validTypes = ["DEPOSIT", "WITHDRAWAL", "P2P"];
+    if (!validTypes.includes(type)) throw new Error("Invalid fee type");
 
-
-const existingMap = Object.fromEntries(
-existingFees.map(f => [f.currency, f.feeAmount])
-);
-
-
-const ops = [
-{
-updateOne: {
-filter: { currency: 'USDC' },
-update: { $set: { feeAmount: usdcFee, updatedBy: adminId } },
-upsert: true
-}
-},
-{
-updateOne: {
-filter: { currency: 'cNGN' },
-update: { $set: { feeAmount: cngnFee, updatedBy: adminId } },
-upsert: true
-}
-}
-];
+    if (usdcFee < 0 || cngnFee < 0) {
+    throw new Error('Fee cannot be negative');
+    }
 
 
-await FeeConfig.bulkWrite(ops);
+    const existingFees = await FeeConfig.find({
+    currency: { $in: ['USDC', 'cNGN'] }
+    }).lean();
+
+
+    const existingMap = Object.fromEntries(
+    existingFees.map(f => [f.currency, f.feeAmount])
+     );
+
+
+    const ops = [
+    {
+    updateOne: {
+    filter: { type: type, currency: 'USDC' },
+    update: { $set: { feeAmount: usdcFee, updatedBy: adminId } },
+    upsert: true
+   }
+   },
+   {
+   updateOne: {
+   filter: { type: type, currency: 'cNGN' },
+   update: { $set: { feeAmount: cngnFee, updatedBy: adminId } },
+   upsert: true
+  }
+  }
+  ];
+
+
+  await FeeConfig.bulkWrite(ops);
 
 
 const history = [];
@@ -56,4 +69,4 @@ return { message: 'Platform fees updated successfully' };
 }
 
 
-module.exports = { setPlatformFees };
+module.exports = { getFlatFee, setPlatformFees };

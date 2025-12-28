@@ -8,18 +8,31 @@ const { getWalletBalance } = require("../services/providers/blockrader");
 const createMerchantAd = async (req, res) => {
   try {
     const userId = req.user.id;
-    const {
-      type,
-      asset,
-      fiat,
-      minLimit,
-      maxLimit,
-      availableAmount,
-      paymentMethods,
-      timeLimit,
-      instructions,
-      autoReply
-    } = req.body;
+    // const {
+    //   type,
+    //   asset,
+    //   fiat,
+    //   minLimit,
+    //   maxLimit,
+    //   availableAmount,
+    //   paymentMethods,
+    //   timeLimit,
+    //   instructions,
+    //   autoReply
+    // } = req.body;
+const {
+  type,
+  minLimit,
+  maxLimit,
+  availableAmount,
+  paymentMethods,
+  timeLimit,
+  instructions,
+  autoReply
+} = req.body;
+
+const asset = req.body.asset?.trim().toUpperCase();
+const fiat  = req.body.fiat?.trim().toUpperCase();
 
     const price = Number(req.body.price); // FIAT PRICE 
 
@@ -39,10 +52,13 @@ const createMerchantAd = async (req, res) => {
     // Enums
     const validTypes = ["BUY", "SELL"];
     const validCryptoAssets = ["USDC", "CNGN"];
-    const validFiatCurrencies = ["NGN", "GHS", "XAF", "XOF", "RMB"];
+    const validFiatCurrencies = ["NGN", "GHS", "XAF", "XOF", "RMB", "USD"];
 
     if (!validTypes.includes(type)) return res.status(400).json({ message: "Invalid ad type." });
-    if (!validCryptoAssets.includes(asset)) return res.status(400).json({ message: "Invalid crypto asset." });
+    // if (!validCryptoAssets.includes(asset)) return res.status(400).json({ message: "Invalid crypto asset." });
+    if (!validCryptoAssets.includes(asset)) {
+    return res.status(400).json({ message: "Invalid crypto asset." });
+}
     if (!validFiatCurrencies.includes(fiat)) return res.status(400).json({ message: "Invalid fiat currency." });
 
     if (!req.user.kycVerified) {
@@ -50,7 +66,7 @@ const createMerchantAd = async (req, res) => {
     }
 
     // 🔑 CRYPTO-ONLY PLATFORM FEE
-    const feeConfig = await FeeConfig.findOne({ currency: asset });
+const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
 
 if (!feeConfig) {
   return res.status(400).json({
@@ -58,12 +74,8 @@ if (!feeConfig) {
   });
 }
 
-const platformFeeCrypto = Number(
-  (availableAmount * feeConfig.flatFee).toFixed(8)
-);
-
-
-
+const feeRate = feeConfig.feeAmount || 0; 
+const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
     // SELL: balance & liquidity checks
     if (type === "SELL") {
       const merchantWallet = await Wallet.findOne({ user_id: userId, currency: asset });
@@ -266,7 +278,7 @@ if (!feeConfig) {
 }
 
 ad.platformFeeCrypto = Number(
-  (effectiveAvailable * feeConfig.flatFee).toFixed(8)
+  (effectiveAvailable * feeConfig.feeAmount).toFixed(8)
 );
 
     }

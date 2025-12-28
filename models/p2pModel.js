@@ -164,7 +164,7 @@ const P2PTradeSchema = new mongoose.Schema(
 
     currencyTarget: {
       type: String,
-      enum: ["USDC", "cNGN"],
+      enum: ["USDC", "cNGN", "CNGN"],
       required: true,
     },
 

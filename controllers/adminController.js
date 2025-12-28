@@ -406,16 +406,16 @@ const getPlatformVolume = async (req, res) => {
     }
 };
 const adminSetPlatformFees = async (req, res) => {
-try {
-const { usdcFee, cngnFee } = req.body;
-const adminId = req.user.id; // injected by auth middleware
+  try {
+  
+    const { type, usdcFee, cngnFee } = req.body;
+    const adminId = req.user.id; 
 
-
-const result = await setPlatformFees({ usdcFee, cngnFee, adminId });
-res.json(result);
-} catch (err) {
-res.status(400).json({ error: err.message });
-}
+    const result = await setPlatformFees({ type, usdcFee, cngnFee, adminId });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 };
 // 🧾 Get all P2P trades (filters + pagination) Example: /api/admin/trades?status=COMPLETED&page=1&limit=10
 const getAllTrades = async (req, res) => {

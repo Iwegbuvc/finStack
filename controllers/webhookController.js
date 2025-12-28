@@ -1,5 +1,5 @@
   const Wallet = require ("../models/walletModel.js");
-  const P2PTrade = require("../models/p2pModel.js");
+  const logger = require("../utilities/logger");
   const Transaction = require("../models/transactionModel");
  const { handleDepositConfirmed, handleWithdrawSuccess } = require("../services/transactionHandlers");
 
@@ -40,50 +40,93 @@
   //     return res.status(500).send("Error processing webhook");
   //   }
   // };
-
-
   //  📡 Handle incoming Blockradar webhooks (PUSH NOTIFICATIONS)
-  const handleBlockradarWebhook = async (req, res) => {
+const handleBlockradarWebhook = async (req, res) => {
     try {
-      const event = req.body;
-      const eventData = event.data;
+        const event = req.body;
+        const eventData = event.data;
 
-      console.log("📥 Incoming Blockradar PUSH webhook:", event.event);
-      
-      // Delegate processing to the service handlers
-      switch (event.event) {
-        case "transfer.completed":
-          await handleTransferCompleted(eventData);
-          break;
+        // Map Blockradar fields to your internal structure
+        const normalizedData = {
+            ...eventData,
+            amount: eventData.amountPaid, // "10.0" from sample payload
+            walletId: eventData.wallet?.id || eventData.addressId,
+            asset: eventData.currency || "USDC",
+            reference: eventData.reference
+        };
 
-        case "transfer.failed":
-          await handleTransferFailed(eventData);
-          break;
+        switch (event.event) {
+            case "deposit.success":
+            case "deposit.confirmed":
+                await handleDepositConfirmed(normalizedData);
+                break;
+            case "withdraw.success":
+                await handleWithdrawSuccess(normalizedData);
+                break;
+        }
 
-        case "deposit.success": 
-        case "deposit.confirmed":
-          // This handles all deposits (external and internal Master->Child transfers)
-          await handleDepositConfirmed(eventData);
-          break;
-
-        case "withdraw.success":
-        case "withdrawal.success":
-          // This handles confirming user withdrawals (including P2P payouts)
-          await handleWithdrawSuccess(eventData);
-          break;
-
-        default:
-          console.log("⚠️ Unhandled event type:", event.event);
-      }
-
-      // Always respond 200 OK quickly so the webhook service does not retry.
-      res.status(200).json({ received: true }); 
+        res.status(200).json({ received: true });
     } catch (error) {
-      console.error("❌ Webhook handling error:", error.message);
-      res.status(500).json({ error: error.message });
+        res.status(500).json({ error: error.message });
     }
-  };
+};
 
+const handlePaycrestWebhook = async (req, res) => {
+    try {
+        const { event, orderId, status, data } = req.body;
+        
+        logger.info(`Paycrest Webhook: Event ${event} for Order ${orderId}`);
+
+        // Find the transaction using the Paycrest Order ID you saved in withdrawalInterService.js
+        const tx = await Transaction.findOne({ "metadata.paycrestOrderId": orderId });
+
+        if (!tx) {
+            logger.warn(`No transaction found for Paycrest Order ID: ${orderId}`);
+            return res.status(200).json({ message: "Order not tracked locally" }); 
+        }
+
+        switch (event) {
+            case "order.fulfilled":
+            case "order.processing":
+               await Transaction.findByIdAndUpdate(tx._id, {
+                  status: "FIAT_PROCESSING"
+            });
+           break;
+
+            case "order.settled":
+                // This means Paycrest has successfully paid the bank account
+                await Transaction.findByIdAndUpdate(tx._id, { 
+                    status: 'COMPLETED',
+                    "metadata.fiatTxHash": data?.txHash 
+                });
+                logger.info(`✅ Withdrawal fully completed for ref: ${tx.reference}`);
+                break;
+
+            case "order.refunded":
+  await Wallet.updateOne(
+    { _id: tx.walletId },
+    { $inc: { balance: tx.amount + tx.feeDetails.totalFee } }
+  );
+
+  await Transaction.findByIdAndUpdate(tx._id, {
+    status: "REFUNDED",
+    "metadata.reason": "Paycrest refund issued"
+  });
+  break;
+
+
+            default:
+                logger.info(`Received unhandled Paycrest event: ${event}`);
+        }
+
+        // Always return 200 to acknowledge receipt
+        res.status(200).json({ success: true });
+    } catch (error) {
+        logger.error("Paycrest webhook processing error:", error.message);
+        res.status(500).json({ error: "Internal processing error" });
+    }
+};
   module.exports = { 
-    handleBlockradarWebhook 
+    handleBlockradarWebhook,
+    handlePaycrestWebhook
   };
