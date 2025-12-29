@@ -1,6 +1,7 @@
 const express = require("express");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
 const { createAnnouncementAndSendMail, updateFlatFee } = require('../controllers/adminController');
+const p2pController = require("../controllers/p2pController");
 const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, adminSetPlatformFees, getFeeSummary, getPlatformVolume} = require("../controllers/adminController");
 
 const router = express.Router();
@@ -26,6 +27,7 @@ router.get("/admin/getAllKycs", verifyToken, isAdmin, getAllKycRecords);
 router.post('/admin/setFees', verifyToken, isAdmin, adminSetPlatformFees);
 // Admin trade management 
 router.get("/admin/trades", verifyToken, isAdmin, getAllTrades);
+router.post("/admin/resolve-trade/:reference", verifyToken, isAdmin, p2pController.adminResolveTrade);
 router.get("/admin/trades/:reference", verifyToken, isAdmin, getTradeDetails);
 
 // Admin only routes for transactions

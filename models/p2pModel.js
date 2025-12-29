@@ -1,68 +1,3 @@
-// const mongoose = require('mongoose');
-
-// const P2PTradeSchema = new mongoose.Schema({
-//     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-//     merchantId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-//     merchantAdId: { type: mongoose.Schema.Types.ObjectId, ref: 'MerchantAd', required: true, index: true },
-
-//     reference: { type: String, unique: true, required: true },
-
-//     amountSource: { type: Number, required: true }, // fiat
-//     amountTarget: { type: Number, required: true }, // crypto to buyer
-//     feePercentage: { type: Number, required: true },
-//     feeAmount: { type: Number, required: true, min: 0 },
-
-//     buyerReceives: { type: Number, required: true },
-
-//     provider: {
-//         type: String,
-//         enum: ["BLOCKRADAR"],
-//         required: true,
-//     },
-
-//     rate: { type: Number, required: true },
-
-//     currencySource: {
-//         type: String,
-//         enum: ["NGN", "cNGN", "USDC", "GHS", "XAF", "XOF", "RMB"],
-//         required: true
-//     },
-
-//     currencyTarget: {
-//         type: String,
-//         enum: ["cNGN", "USDC"],
-//         required: true
-//     },
-
-//     transactionType: { type: String, default: "P2P" },
-
-//     status: {
-//         type: String,
-//         enum: [
-//             'PENDING_PAYMENT',
-//             'PAYMENT_CONFIRMED_BY_BUYER',
-//             'COMPLETED',
-//             'FAILED',
-//             'CANCELLED',
-//             'CANCELLED_REVERSED',
-//         ],
-//         default: 'PENDING_PAYMENT',
-//     },
-
-//     expiresAt: { type: Date, required: true },
-
-//     metadata: Object,
-
-//     logs: [{
-//         message: String,
-//         actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-//         role: String,
-//         ip: String,
-//         time: { type: Date, default: Date.now }
-//     }]
-// }, { timestamps: true });
-
-// module.exports = mongoose.model('P2PTrade', P2PTradeSchema);
 const mongoose = require("mongoose");
 
 const P2PTradeSchema = new mongoose.Schema(
@@ -158,13 +93,13 @@ const P2PTradeSchema = new mongoose.Schema(
     // =====================
     currencySource: {
       type: String,
-      enum: ["NGN", "cNGN", "USDC", "GHS", "XAF", "XOF", "RMB", "USD"],
+      enum: ["NGN", "CNGN", "USDC", "GHS", "XAF", "XOF", "RMB", "USD"],
       required: true,
     },
 
     currencyTarget: {
       type: String,
-      enum: ["USDC", "cNGN", "CNGN"],
+      enum: ["USDC", "CNGN", "CNGN"],
       required: true,
     },
 
@@ -184,6 +119,8 @@ const P2PTradeSchema = new mongoose.Schema(
       type: String,
       enum: [
         "PENDING_PAYMENT",
+        "MERCHANT_PAID",     
+    "DISPUTE_PENDING",
         "PAYMENT_CONFIRMED_BY_BUYER",
         "COMPLETED",
         "CANCELLED",
@@ -193,6 +130,24 @@ const P2PTradeSchema = new mongoose.Schema(
       default: "INIT",
       index: true,
     },
+
+  notifications: {
+  merchantNotified: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  buyerPaidNotified: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  // disputeNotified: {
+  //   type: Boolean,
+  //   default: false,
+  //   index: true,
+  // },
+},
 
     // =====================
     // TIME CONTROL

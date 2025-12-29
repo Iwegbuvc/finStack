@@ -103,7 +103,7 @@ const generateVerificationSuccessMail = (firstName) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 20px auto;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.URL}" 
+                            <a href="${process.env.FRONTEND_URL}" 
                                style="display: inline-block; padding: 12px 30px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Start Trading Now
@@ -190,7 +190,7 @@ const generateVerificationRequest = (firstName, verificationCode) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.URL}/verify/${verificationCode}" 
+                            <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" 
                                style="display: inline-block; padding: 14px 35px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Verify My Email
@@ -201,7 +201,7 @@ const generateVerificationRequest = (firstName, verificationCode) => {
                 
                 <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 14px;">
                     Or use this link:<br>
-                    <a href="${process.env.URL}/verify/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/verify/${verificationCode}</a>
+                    <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/verify/${verificationCode}</a>
                 </p>
                 
                 <p style="line-height: 1.6; margin: 0; color: #666; font-size: 12px;">
@@ -397,7 +397,6 @@ const generatePasswordResetMail = (firstName) => {
 </html>
     `
 }
-// Add this new function along with your existing mail generator functions
 
 const generateAnnouncementMail = (title, body, firstName = 'User') => {
     // Reusing the existing email structure (Header, Footer, styles) for consistency
@@ -451,5 +450,73 @@ const generateAnnouncementMail = (title, body, firstName = 'User') => {
     `;
 };
 
+const escapeHtml = (str = "") =>
+  String(str).replace(/[&<>"']/g, m =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])
+  );
 
-module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail};
+const generateTradeAlertMail = ({
+  firstName,
+  amount,
+  currency,
+  reference,
+  side,
+}) => {
+  const tradeType =
+    side === "BUY" ? "buy crypto from you" : "sell crypto to you";
+
+  const safeName = escapeHtml(firstName);
+  const safeRef = escapeHtml(reference);
+
+  return {
+    subject: `New P2P Trade Request – ${safeRef}`,
+    text: `Hello ${safeName},
+A new P2P trade has been initiated.
+
+Action: User wants to ${tradeType}
+Amount: ${amount} ${currency}
+Trade Ref: ${safeRef}
+
+Login to process this trade.`,
+
+    html: `
+<!DOCTYPE html>
+<html>
+<body style="font-family: Arial, sans-serif;">
+  <h2>New P2P Trade</h2>
+  <p>Hello ${safeName},</p>
+
+  <p>A new trade has been initiated.</p>
+
+  <ul>
+    <li><strong>Action:</strong> ${tradeType}</li>
+    <li><strong>Amount:</strong> ${amount} ${currency}</li>
+    <li><strong>Trade Ref:</strong> ${safeRef}</li>
+  </ul>
+
+  <p>
+    <a href="${process.env.FRONTEND_URL}/trades/${safeRef}">
+      View Trade
+    </a>
+  </p>
+
+  <p>Please stay online until the trade is completed.</p>
+</body>
+</html>
+`,
+  };
+};
+
+
+const generateBuyerPaidMail = ({ firstName, reference, amount }) => ({
+  subject: "Buyer marked payment as sent",
+  html: `<p>Hello ${firstName},</p>
+         <p>The buyer has marked payment as sent.</p>
+         <p><strong>Amount:</strong> ${amount}</p>
+         <p><strong>Trade Ref:</strong> ${reference}</p>
+         <p>Please verify that payment has been received.</p>`,
+  text: `Buyer marked payment as sent. Ref: ${reference}`
+});
+
+
+module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail, generateTradeAlertMail, generateBuyerPaidMail };

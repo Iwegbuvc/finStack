@@ -7,7 +7,6 @@ const MerchantAd = require("../models/merchantModel");
 function handleServiceError(res, error) {
   const message = error.message || "Internal server error.";
   let status = 500;
-  
   // Map specific service errors to appropriate HTTP status codes
   if (message.includes("required") || message.includes("Unsupported currency") || message.includes("Invalid amount") || message.includes("missing destination address for target currency") || message.includes("account_number")) {
     status = 400; // Bad Request (client error/missing required data)
@@ -57,10 +56,7 @@ const createUsdWallet = async (req, res) => {
   }
 }
 
-/**
- * 🧩 Controller: Handles HTTP requests for P2P trading actions
- */
-// Corrected function that used adID
+/**🧩 Controller: Handles HTTP requests for P2P trading actions */
 const createTrade = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -150,7 +146,6 @@ const buyerConfirmPayment = async (req, res) => {
     handleServiceError(res, error);
   }
 }
-
 // // 3a. Initiate Merchant Confirm Payment (POST /trade/:reference/initiate-merchant-payment-confirmation)
 const initiateMerchantConfirmPayment = async (req, res) => {
   try {
@@ -173,8 +168,6 @@ const initiateMerchantConfirmPayment = async (req, res) => {
     handleServiceError(res, error);
   }
 };
-
-
 // 3b. Merchant confirms payment with OTP (POST /trade/:reference/confirm-merchant-payment)
 const merchantConfirmPayment = async (req, res) => {
   try {
@@ -203,9 +196,6 @@ const merchantConfirmPayment = async (req, res) => {
     handleServiceError(res, error);
   }
 };
-
-
-
 // 4. Cancel trade (DELETE /trade/:reference/cancel)
 const cancelTrade = async (req, res) => {
   try {
@@ -228,6 +218,27 @@ const cancelTrade = async (req, res) => {
   }
 }
 
+const merchantMarkPaid = async (req, res) => {
+  try {
+    const { reference } = req.params;
+    const trade = await p2pService.merchantMarksFiatSent(reference, req.user.id, req.ip);
+    res.status(200).json({ success: true, message: "Merchant marked as paid", data: trade });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
+};
+
+const adminResolveTrade = async (req, res) => {
+  try {
+    const { reference } = req.params;
+    const { action } = req.body; // "RELEASE" or "CANCEL"
+    const trade = await p2pService.adminResolveTrade(reference, action, req.user.id, req.ip);
+    res.status(200).json({ success: true, message: "Trade resolved by admin", data: trade });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
+};
+
 // Using the concise export syntax, and only exporting the functions intended for the router.
 module.exports = {
   createTrade,
@@ -236,4 +247,6 @@ module.exports = {
    merchantConfirmPayment,
   cancelTrade,
   createUsdWallet,
+  merchantMarkPaid,
+  adminResolveTrade
 };

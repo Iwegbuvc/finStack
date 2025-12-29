@@ -155,9 +155,9 @@ const adminUpdateKycStatus = async (req, res) => {
       // ✅ Step 1: Get or create stablecoin child address
       const { externalWalletId, cryptoAddress, accountName } = await getOrCreateStablecoinAddress(kycRecord.user_id);
 
-      // ✅ Step 2: Create USDC and cNGN wallets
+      // ✅ Step 2: Create USDC and CNGN wallets
       await createWalletRecord({ userId: kycRecord.user_id._id, currency: "USDC", externalWalletId, walletAddress: cryptoAddress, accountName: `${accountName} - USDC`, session });
-      await createWalletRecord({ userId: kycRecord.user_id._id, currency: "cNGN", externalWalletId, walletAddress: cryptoAddress, accountName: `${accountName} - cNGN`, session });
+      await createWalletRecord({ userId: kycRecord.user_id._id, currency: "CNGN", externalWalletId, walletAddress: cryptoAddress, accountName: `${accountName} - CNGN`, session });
 
       // ✅ Step 3: NGN account for Nigerian users
     //   if (kycRecord.country?.toLowerCase() === "nigeria") {

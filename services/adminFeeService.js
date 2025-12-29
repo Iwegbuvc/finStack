@@ -21,7 +21,7 @@ async function setPlatformFees({ type, usdcFee, cngnFee, adminId }) {
 
 
     const existingFees = await FeeConfig.find({
-    currency: { $in: ['USDC', 'cNGN'] }
+    currency: { $in: ['USDC', 'CNGN'] }
     }).lean();
 
 
@@ -40,7 +40,7 @@ async function setPlatformFees({ type, usdcFee, cngnFee, adminId }) {
    },
    {
    updateOne: {
-   filter: { type: type, currency: 'cNGN' },
+   filter: { type: type, currency: 'CNGN' },
    update: { $set: { feeAmount: cngnFee, updatedBy: adminId } },
    upsert: true
   }
@@ -55,8 +55,8 @@ const history = [];
 if (existingMap.USDC !== usdcFee) {
 history.push({ currency: 'USDC', oldFee: existingMap.USDC ?? 0, newFee: usdcFee, updatedBy: adminId });
 }
-if (existingMap.cNGN !== cngnFee) {
-history.push({ currency: 'cNGN', oldFee: existingMap.cNGN ?? 0, newFee: cngnFee, updatedBy: adminId });
+if (existingMap.CNGN !== cngnFee) {
+history.push({ currency: 'CNGN', oldFee: existingMap.CNGN ?? 0, newFee: cngnFee, updatedBy: adminId });
 }
 
 

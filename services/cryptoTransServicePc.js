@@ -44,7 +44,7 @@ const initiateCryptoTransfer = async ({ userId, token, receiveAddress, amount, r
             sourceAddressId, 
             toCryptoAddress, 
             amount, 
-            token, // currency is token (USDC, cNGN)
+            token, // currency is token (USDC, CNGN)
             idempotencyKey 
         );
 

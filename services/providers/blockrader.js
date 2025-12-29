@@ -162,7 +162,7 @@ return { ...newAddress, fromExisting: false };
 
     // 🏦 CREATE VIRTUAL ACCOUNT (linked to Child Address)
     async function createVirtualAccountForChildAddress(childAddressId, kycData) {
-        const context = "Create Virtual Account (cNGN Deposit) for Child Address";
+        const context = "Create Virtual Account (CNGN Deposit) for Child Address";
         
         if (!BLOCKRADER_MASTER_WALLET_UUID) {
             throw new Error("FATAL: Master Wallet UUID (COMPANY_ESCROW_ACCOUNT_ID) is missing or undefined.");
@@ -212,7 +212,7 @@ return { ...newAddress, fromExisting: false };
             };
         } catch (error) {
             logBlockraderError(context, error);
-            throw new Error("Failed to create user's cNGN deposit account: " + (error.response?.data?.message || error.message));
+            throw new Error("Failed to create user's CNGN deposit account: " + (error.response?.data?.message || error.message));
         }
     }
 async function createVirtualAccountIfMissing(user, childAddressId, kycData) {

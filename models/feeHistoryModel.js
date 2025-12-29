@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const FeeHistorySchema = new mongoose.Schema({
 currency: {
 type: String,
-enum: ["USD", "NGN", "GHS", "RMB", "XOF", "XAF","USDC", "cNGN"],
+enum: ["USD", "NGN", "GHS", "RMB", "XOF", "XAF","USDC", "CNGN"],
 required: true
 },
 oldFee: { type: Number, required: true },

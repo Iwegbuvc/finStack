@@ -69,7 +69,7 @@ const submitPaycrestWithdrawal = async (req, res) => {
   try {
     // 1. Collect all required inputs, including OTP and all Paycrest fiat details
     const { 
-      walletCurrency,   // e.g., "cNGN" (The crypto being spent)
+      walletCurrency,   // e.g., "CNGN" (The crypto being spent)
     fiatCurrency,     // e.g., "GHS", "USD", "NGN" (The fiat being received) 👈 NEW
     amount, 
     otpCode,
@@ -101,7 +101,7 @@ const submitPaycrestWithdrawal = async (req, res) => {
 
   const result = await createWithdrawalRequest({
     userId,
-    currency: walletCurrency, // "cNGN"
+    currency: walletCurrency, // "CNGN"
     fiatCurrency,             // 👈 NEW: Pass this down
     amount,
     externalAddress: destinationAccountNumber,
