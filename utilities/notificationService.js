@@ -1,7 +1,7 @@
 const sendMail = require("./sendMail");
 const User = require("../models/userModel");
 const P2PTrade = require("../models/p2pModel");
-const { generateTradeAlertMail, generateBuyerPaidMail } = require("./mailGenerator");
+const { generateTradeAlertMail, generateBuyerPaidMail, generateMerchantPaidMail, generateAdminResolutionMail } = require("./mailGenerator");
 const logger = require("./logger");
 
 const notifyMerchantOfTrade = async (tradeId) => {
@@ -90,5 +90,80 @@ const notifyMerchantBuyerPaid = async (tradeId) => {
   });
 };
 
+const notifyBuyerOfMerchantPayment = async (tradeId) => {
+  const trade = await P2PTrade.findById(tradeId).populate("userId").lean();
+  if (!trade || !trade.userId?.email) return;
 
-module.exports = { notifyMerchantOfTrade, notifyMerchantBuyerPaid };
+  const mail = generateMerchantPaidMail({
+    firstName: trade.userId.firstName,
+    reference: trade.reference,
+    amount: trade.amountFiat,
+    currency: trade.currencySource
+  });
+
+  await sendMail(trade.userId.email, mail.subject, mail.html, mail.text);
+
+  // Notify via Socket for real-time UI updates
+  global.io?.to(trade.userId._id.toString()).emit("trade:merchant_paid", {
+    reference: trade.reference,
+    message: "The merchant has marked the fiat payment as sent."
+  });
+};
+
+const notifyUserOfAdminResolution = async (tradeId, outcome) => {
+  const trade = await P2PTrade.findById(tradeId)
+    .populate("userId", "firstName email")
+    .lean();
+
+  if (!trade?.userId?.email) return;
+
+  const mail = generateAdminResolutionMail({
+    firstName: trade.userId.firstName,
+    reference: trade.reference,
+    outcome,
+    role: "user"
+  });
+
+  await sendMail(
+    trade.userId.email,
+    mail.subject,
+    mail.html,
+    mail.text
+  );
+
+  global.io?.to(trade.userId._id.toString()).emit("trade:admin_resolved", {
+    reference: trade.reference,
+    status: trade.status
+  });
+};
+
+const notifyMerchantOfAdminResolution = async (tradeId, outcome) => {
+  const trade = await P2PTrade.findById(tradeId)
+    .populate("merchantId", "firstName email")
+    .lean();
+
+  if (!trade?.merchantId?.email) return;
+
+  const mail = generateAdminResolutionMail({
+    firstName: trade.merchantId.firstName,
+    reference: trade.reference,
+    outcome,
+    role: "merchant"
+  });
+
+  await sendMail(
+    trade.merchantId.email,
+    mail.subject,
+    mail.html,
+    mail.text
+  );
+
+  global.io?.to(trade.merchantId._id.toString()).emit("trade:admin_resolved", {
+    reference: trade.reference,
+    status: trade.status
+  });
+};
+
+
+module.exports = { notifyMerchantOfTrade, notifyMerchantBuyerPaid, notifyBuyerOfMerchantPayment, notifyUserOfAdminResolution,
+  notifyMerchantOfAdminResolution};

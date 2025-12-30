@@ -11,8 +11,12 @@ router.post("/trade/:reference/confirm-buyer-payment", verifyToken,transactionLi
 // MERCHANT PAID FAIT CONFIRMATION 
 router.post("/trade/:reference/merchant-paid", verifyToken, p2pController.merchantMarkPaid);
 // ⬅️ CRITICAL FIX: ADD THIS ROUTE FOR OTP INITIATION
-router.post("/trade/:reference/initiate-merchant-confirmation", verifyToken, transactionLimiter, p2pController.initiateMerchantConfirmPayment);
-
-router.post("/trade/:reference/confirm-merchant-payment", verifyToken, transactionLimiter, p2pController.merchantConfirmPayment);
+// router.post("/trade/:reference/initiate-merchant-confirmation", verifyToken, transactionLimiter, p2pController.initiateMerchantConfirmPayment);
+// Route to request OTP (The Seller calls this)
+router.post("/trade/:reference/initiate-release", verifyToken, transactionLimiter, p2pController.initiateSettlementOTP);
+// Route to verify OTP and release (The Seller calls this)
+router.post("/trade/:reference/confirm-release", verifyToken, transactionLimiter, p2pController.confirmAndReleaseCrypto);
+// router.post("/trade/:reference/confirm-merchant-payment", verifyToken, transactionLimiter, p2pController.merchantConfirmPayment);
 router.delete("/trade/:reference/cancel", verifyToken, p2pController.cancelTrade);
+router.get("/trade/:reference", verifyToken, p2pController.getTradeDetails);
 module.exports = router;

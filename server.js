@@ -6,6 +6,7 @@ const cors = require('cors');
 const webhookRoutes = require("./routes/webhookRoutes");
 const connectDataBase = require('./config/db');
 const authRoutes = require("./routes/authRoutes")
+const userRoutes = require("./routes/userRoutes")
 const adminRoutes = require("./routes/adminRoutes")
 const kycRoutes = require("./routes/kycRoutes")
 const walletRoutes = require ("./routes/walletRoutes");
@@ -58,6 +59,7 @@ app.get("/", (req, res) => {
 
 // Routes
 app.use("/api", authRoutes)
+app.use("/api", userRoutes)
 app.use("/api", adminRoutes)
 app.use("/api", kycRoutes)
 app.use("/api", walletRoutes)

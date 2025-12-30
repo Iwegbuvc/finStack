@@ -11,7 +11,9 @@ const { getCache, setCache, redisClient } = require('../utilities/redis');
 const FeeLog = require("../models/feeLogModel");
 const FeeConfig = require('../models/feeConfigModel');
 const CACHE_TTL = Number(process.env.BALANCE_CACHE_TTL_SECONDS || 30);
-const { notifyMerchantOfTrade, notifyMerchantBuyerPaid } = require('../utilities/notificationService');
+const { notifyMerchantOfTrade, notifyMerchantBuyerPaid, notifyBuyerOfMerchantPayment, notifyUserOfAdminResolution,
+  notifyMerchantOfAdminResolution } = require('../utilities/notificationService');
+const UserBankAccount = require("../models/userBankAccountModel")
 
 // 🔑 Inline currency normalizer 
 const normalize = (v) => v?.trim().toUpperCase();
@@ -52,9 +54,7 @@ function safeLog(trade, logEntry) {
 async function resolveUserWalletId(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId); 
-    
     // 2. Normalize the currency string to match the Mongoose Model enum (e.g., "CNGN" or "USDC")
-    // const currencyValue = currency.toLowerCase() === 'cngn' ? 'CNGN' : currency.toUpperCase();
     const currencyValue = normalize(currency);
 
     const wallet = await Wallet.findOne({
@@ -74,9 +74,7 @@ async function resolveUserWalletId(userId, currency) {
 async function resolveUserCryptoAddress(userId, currency) {
     // 1. Keep the ObjectId explicit cast for stability
     const userObjectId = new mongoose.Types.ObjectId(userId);
-    
     // 2. Normalize the currency string to match the Mongoose Model enum
-    // const currencyValue = currency.toLowerCase() === 'cngn' ? 'cNGN' : currency.toUpperCase();
 const currencyValue = normalize(currency);
 
     const wallet = await Wallet.findOne({
@@ -144,141 +142,8 @@ async getAllUserWalletBalances(userId) {
     await setCache(cacheKey, results, CACHE_TTL);
     return results;
 },
-// 
-// async initiateTrade(buyerId, merchantAd, data, ip = null) {
-//   await checkUser(buyerId);
-//   await checkUser(merchantAd.userId);
-//   // ✅ NORMALIZE CURRENCIES ONCE
-//   const currencySource = String(data.currencySource).trim().toUpperCase();
-//   const currencyTarget = String(data.currencyTarget).trim().toUpperCase();
-//   // 1️⃣ Validate time limit
-//   if (!data.timeLimit || isNaN(data.timeLimit)) {
-//     throw new Error("Merchant ad timeLimit is missing or invalid");
-//   }
 
-//   const expiresAt = new Date(Date.now() + Number(data.timeLimit) * 60 * 1000);
-//   // ---------- LIMIT & UNIT VALIDATION ----------
-//   const fiatAmount = Number(data.amountSource);
-
-//   if (fiatAmount < merchantAd.minLimit) {
-//     throw new TradeError("Amount below minimum trade limit");
-//   }
-
-//   if (fiatAmount > merchantAd.maxLimit) {
-//     throw new TradeError("Amount exceeds maximum trade limit");
-//   }
-//   // 2️⃣ Convert fiat → crypto (listing price)
-//   const cryptoAmount = fiatAmount / merchantAd.price;
-
-//   // 3️⃣ Liquidity check
-//   if (cryptoAmount > merchantAd.availableAmount) {
-//     throw new TradeError("Insufficient ad liquidity");
-//   }
-
-//   // Fetch the latest global P2P fee set by the admin for the target currency (e.g., USDC)
-//   const globalP2PFee = await FeeConfig.findOne({ 
-//       type: "P2P", 
-//       currency:currencyTarget 
-//   });
-
-//   // Use the global fee if found, otherwise fallback to 0
-//   const platformFeeCrypto = globalP2PFee ? globalP2PFee.feeAmount : 0;
-
-//   // --- VALIDATION GUARDS ---
-//   if (platformFeeCrypto === null || platformFeeCrypto < 0) {
-//       throw new TradeError("Platform fee for this currency is not configured.");
-//   }
-
-//   if (platformFeeCrypto >= cryptoAmount) {
-//     throw new TradeError("Platform fee exceeds or equals trade amount. Trade too small.");
-//   }
-  
-//   if (platformFeeCrypto <= 0) {
-//      console.warn(`[SYSTEM] Trade initiated with 0 platform fee for ${currencyTarget}`);
-//   }
-
-//   // const netCryptoAmount = cryptoAmount - platformFeeCrypto;
-//   // 5️⃣ Reference
-//   const reference = data.reference || `P2P-${Date.now()}`;
-
-//   // ---------- TRANSACTION ----------
-//   const session = await mongoose.startSession();
-//   session.startTransaction();
-//   let trade;
-//   try {
-//     // 6️⃣ Atomic liquidity deduction
-//     const adUpdateResult = await MerchantAd.findOneAndUpdate(
-//       {
-//         _id: merchantAd._id,
-//         availableAmount: { $gte: cryptoAmount }
-//       },
-//       {
-//         $inc: { availableAmount: -cryptoAmount }
-//       },
-//       { new: true, session }
-//     );
-
-//     if (!adUpdateResult) {
-//       throw new Error("Insufficient liquidity or merchant ad not found.");
-//     }
-//     const ad = await MerchantAd.findById(merchantAd._id);
-//     // 7️⃣ Create trade (LOCK VALUES)
-//     const tradeDoc = await P2PTrade.create(
-//       [{
-//         reference,
-//         userId: buyerId,
-//         merchantId: merchantAd.userId,
-//         merchantAdId: merchantAd._id,
-//         side: merchantAd.type === "SELL" ? "BUY" : "SELL",
-//         amountFiat: fiatAmount,
-//         amountCrypto: cryptoAmount,          // 🔒 GROSS
-//         platformFeeCrypto: platformFeeCrypto,                  // 🔒 PLATFORM FEE (Dynamic value)
-//         netCryptoAmount: cryptoAmount - platformFeeCrypto,                    // 🔒 NET TO RECEIVER
-//         marketRate: merchantAd.rawPrice,
-//         listingRate: merchantAd.price,
-//         currencySource,
-//         currencyTarget,
-//         provider: "BLOCKRADAR",
-//         status: ALLOWED_STATES.INIT,
-//         expiresAt
-//       }],
-//       { session }
-//     );
-//     trade = tradeDoc[0];
-//     // 8️⃣ Initial audit log
-//     safeLog(trade, {
-//       message: "Trade created. Awaiting buyer payment.",
-//       actor: buyerId,
-//       role: "buyer",
-//       ip,
-//       time: new Date()
-//     });
-
-//     await session.commitTransaction();
-//   } catch (err) {
-//     await session.abortTransaction();
-//     throw err;
-//   } finally {
-//     session.endSession();
-//   }
-//     // Notify merchant asynchronously (don't block the main flow)
-//   const tradeId = trade._id;
-
-// setImmediate(() => {
-//   notifyMerchantOfTrade(tradeId).catch(err => {
-//     logger.error("Merchant trade notification failed", {
-//       tradeId,
-//       error: err.stack || err.message,
-//     });
-//   });
-// });
-
-
-
-//   return await P2PTrade.findById(trade._id).lean();
-// },
-
-// SECURE MERCHANT ASSET BEFORE FIAT IS SENT
+// SECURE MERCHANT ASSET BEFORE FIAT IS SENT WHEN MERCHANT IS BUYING CRYPTO
 async initiateTrade(buyerId, merchantAd, data, ip = null) {
   await checkUser(buyerId);
   await checkUser(merchantAd.userId);
@@ -311,6 +176,44 @@ async initiateTrade(buyerId, merchantAd, data, ip = null) {
 
   const reference = data.reference || `P2P-${Date.now()}`;
 
+  // 🏦 1. FETCH BANK DETAILS (SNAPSHOT) BEFORE STARTING TRANSACTION
+  // Side SELL means the user is selling to a BUY ad (Merchant is buying)
+  const isUserSelling = (merchantAd.type === 'BUY'); 
+  let paymentSnapshot = null;
+
+  if (isUserSelling) {
+      // User is the one receiving Fiat, we need their primary bank
+      const primaryBank = await UserBankAccount.findOne({
+          userId: buyerId,
+          isPrimary: true,
+          deletedAt: null
+      }).lean();
+
+      if (!primaryBank) {
+          throw new TradeError("Please add and set a primary bank account in settings before selling.");
+      }
+
+      paymentSnapshot = {
+          bankName: primaryBank.bankName,
+          accountNumber: primaryBank.accountNumber,
+          accountName: primaryBank.accountName,
+          bankCode: primaryBank.bankCode
+      };
+  } else {
+      // Merchant is the one receiving Fiat (Merchant is selling crypto)
+      const merchantBank = await UserBankAccount.findOne({
+          userId: merchantAd.userId,
+          isPrimary: true,
+          deletedAt: null
+      }).lean();
+      
+      paymentSnapshot = {
+          bankName: merchantBank?.bankName,
+          accountNumber: merchantBank?.accountNumber,
+          accountName: merchantBank?.accountName,
+          bankCode: merchantBank?.bankCode
+      };
+  }
   const session = await mongoose.startSession();
   session.startTransaction();
   let trade;
@@ -345,13 +248,14 @@ async initiateTrade(buyerId, merchantAd, data, ip = null) {
       escrowTxId = transferResult?.data?.id || transferResult?.txId || "n/a";
     }
 
-    const initialStatus = shouldPreEscrow ? ALLOWED_STATES.MERCHANT_PAID : ALLOWED_STATES.INIT;
+    const initialStatus = ALLOWED_STATES.INIT;
 console.log("merchantAd fields:", {
   price: merchantAd.price,
-  rawPrice: merchantAd.rawPrice
+  rawPrice: merchantAd.price
 });
 
     // Create the trade
+   // 🏦 2. ATTACH THE SNAPSHOT TO THE TRADE CREATION
     const tradeDoc = await P2PTrade.create([{
       reference,
       userId: buyerId,
@@ -369,7 +273,9 @@ console.log("merchantAd fields:", {
       provider: "BLOCKRADAR",
       status: initialStatus,
       expiresAt,
-      escrowTxId
+      escrowTxId,
+      // Pass the snapshot here
+      paymentDetails: paymentSnapshot 
     }], { session });
 
     trade = tradeDoc[0];
@@ -543,112 +449,115 @@ setImmediate(() => {
   }
 },
 
-// async merchantMarksFiatSent(reference, merchantId, ip = null) {
-//     if (!reference) throw new TradeError("Reference required");
+async merchantMarksFiatSent(reference, merchantId, ip = null) {
+    if (!reference) throw new TradeError("Reference required");
 
-//     const trade = await P2PTrade.findOne({ reference });
-//     if (!trade) throw new TradeError("Trade not found", 404);
+    const trade = await P2PTrade.findOne({ reference });
+    if (!trade) throw new TradeError("Trade not found", 404);
 
-//     // Only merchant
-//     if (trade.merchantId.toString() !== merchantId.toString()) {
-//         throw new TradeError("Unauthorized", 403);
-//     }
+    // Only merchant
+    if (trade.merchantId.toString() !== merchantId.toString()) {
+        throw new TradeError("Unauthorized", 403);
+    }
 
-//     /** This applies ONLY when merchant is BUYING crypto * merchantAd.type === BUY → trade.side === SELL  */
-//     if (trade.side !== "SELL") {
-//         throw new TradeError(
-//             "Merchant payment confirmation is only allowed when merchant is buying crypto",
-//             409
-//         );
-//     }
+    /** This applies ONLY when merchant is BUYING crypto * merchantAd.type === BUY → trade.side === SELL  */
+    if (trade.side !== "SELL") {
+        throw new TradeError(
+            "Merchant payment confirmation is only allowed when merchant is buying crypto",
+            409
+        );
+    }
 
-//     if (trade.status !== ALLOWED_STATES.INIT) {
-//         throw new TradeError(
-//             `Cannot mark payment sent in status: ${trade.status}`,
-//             409
-//         );
-//     }
+    if (trade.status !== ALLOWED_STATES.INIT) {
+        throw new TradeError(
+            `Cannot mark payment sent in status: ${trade.status}`,
+            409
+        );
+    }
 
-//     return await updateTradeStatusAndLogSafe(
-//         trade._id,
-//         ALLOWED_STATES.MERCHANT_PAID,
-//         {
-//             message: "Merchant marked fiat as sent. Awaiting buyer confirmation.",
-//             actor: merchantId,
-//             role: "merchant",
-//             ip
-//         },
-//         trade.status
-//     );
-// },
+    // 1. Execute the status update and store the result
+    const updatedTrade = await updateTradeStatusAndLogSafe(
+        trade._id,
+        ALLOWED_STATES.MERCHANT_PAID,
+        {
+            message: "Merchant marked fiat as sent. Awaiting buyer confirmation.",
+            actor: merchantId,
+            role: "merchant",
+            ip
+        },
+        trade.status
+    );
 
+    // 2. 🔔 ADD THIS: Notify the User (Buyer) that the Merchant has sent the money
+    // We use updatedTrade._id to ensure we are referencing the valid, updated record
+    await notifyBuyerOfMerchantPayment(updatedTrade._id);
 
-    async initiateMerchantPaymentConfirmation(reference, merchantId, ip = null) {
-        if (!reference) throw new TradeError("Reference required");
-        let trade = await P2PTrade.findOne({ reference });
-        if (!trade) throw new TradeError("Trade not found", 404);
+    // 3. Return the updated trade object to the controller
+    return updatedTrade;
+},
 
-        // --- GUARDS ---
-        if (trade.merchantId.toString() !== merchantId.toString()) {
-            throw new TradeError("Unauthorized: Only the merchant can initiate confirmation.", 403);
-        }
-        
-        const expectedStatus = ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER;
+async initiateSettlementOTP(reference, requesterId) {
+    if (!reference) throw new TradeError("Reference required");
+    const trade = await P2PTrade.findOne({ reference });
+    if (!trade) throw new TradeError("Trade not found", 404);
 
-        if (trade.status !== expectedStatus) {
-            throw new TradeError(`Cannot initiate confirmation. Trade is in status: ${trade.status}. Expected status: ${expectedStatus}.`, 409);
-        }
-        // --- END GUARDS ---
-        
-        const merchantUser = await User.findById(merchantId).select('email').lean();
-        if (!merchantUser) {
-            throw new TradeError("Merchant user not found.", 404);
-        }
+    const sellerId = trade.side === 'BUY' ? trade.merchantId : trade.userId;
 
-        await generateAndSendOtp(merchantId, 'P2P_SETTLEMENT', merchantUser.email); 
+    if (requesterId.toString() !== sellerId.toString()) {
+        throw new TradeError("Unauthorized: Only the seller can release crypto.", 403);
+    }
 
-        return { message: "Verification code sent to merchant's email. Awaiting OTP confirmation." };
-    },
+    // ✅ FIX: Allow both statuses depending on the trade flow
+    const validStatuses = [
+        ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER, 
+        ALLOWED_STATES.MERCHANT_PAID
+    ];
 
-   async confirmMerchantPayment(reference, merchantId, otpCode, ip = null) {
+    if (!validStatuses.includes(trade.status)) {
+        throw new TradeError(`Cannot release. Trade is in status: ${trade.status}.`, 409);
+    }
+
+    const sellerUser = await User.findById(sellerId).select('email').lean();
+    await generateAndSendOtp(sellerId, 'P2P_SETTLEMENT', sellerUser.email); 
+
+    return { message: "Verification code sent to your email. Enter OTP to release crypto." };
+},
+
+async confirmAndReleaseCrypto(reference, requesterId, otpCode, ip = null) {
     if (!reference || !otpCode) throw new TradeError("Reference and OTP code required");
 
     const trade = await P2PTrade.findOne({ reference });
     if (!trade) throw new TradeError("Trade not found", 404);
 
-    // --- GUARDS ---
-    if (trade.merchantId.toString() !== merchantId.toString()) {
-        throw new TradeError("Unauthorized: Only the merchant can confirm payment.", 403);
+    // Identify the Seller
+    const sellerId = trade.side === 'BUY' ? trade.merchantId : trade.userId;
+    const isAdminAction = otpCode === "ADMIN_OVERRIDE";
+
+    if (!isAdminAction && requesterId.toString() !== sellerId.toString()) {
+        throw new TradeError("Unauthorized: Only the seller can confirm receipt.", 403);
     }
 
-    // const expectedStatus = ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER;
-    // if (trade.status !== expectedStatus) {
-    //     throw new TradeError(
-    //         `Cannot confirm/settle. Trade is in status: ${trade.status}. Expected status: ${expectedStatus}.`,
-    //         409
-    //     );
-    // }
-    const validStatuses = [ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER, ALLOWED_STATES.DISPUTE_PENDING];
-if (!validStatuses.includes(trade.status)) {
-    throw new TradeError(`Cannot settle. Trade status is ${trade.status}.`, 409);
-}
-    // --- END GUARDS ---
-    // 🔑 OTP Verification
-    // const isVerified = await verifyOtp(merchantId, otpCode, 'P2P_SETTLEMENT');
-    // if (!isVerified) throw new TradeError("Invalid or expired OTP.", 401);
+  // ✅ FIX: Ensure this matches the initiation logic
+    const validStatuses = [
+        ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER, 
+        ALLOWED_STATES.MERCHANT_PAID, 
+        ALLOWED_STATES.DISPUTE_PENDING
+    ];
+    
+    if (!validStatuses.includes(trade.status)) {
+        throw new TradeError(`Cannot settle. Trade status is ${trade.status}.`, 409);
+    }
 
-    // If it IS "ADMIN_OVERRIDE", it skips the check and moves straight to Blockrader transfer
-    if (otpCode !== "ADMIN_OVERRIDE") {
-    const isVerified = await verifyOtp(merchantId, otpCode, 'P2P_SETTLEMENT');
-    if (!isVerified) throw new TradeError("Invalid or expired OTP.", 401);
-}
-    // Determine recipient based on trade side
-    const recipientAddress =
-        trade.side === 'BUY'
-            ? await resolveUserCryptoAddress(trade.userId, trade.currencyTarget)      // Buyer receives crypto
-            : await resolveUserCryptoAddress(trade.merchantId, trade.currencyTarget); // Merchant receives crypto
+    if (!isAdminAction) {
+        const isVerified = await verifyOtp(sellerId, otpCode, 'P2P_SETTLEMENT');
+        if (!isVerified) throw new TradeError("Invalid or expired OTP.", 401);
+    }
 
-    try {
+    // Determine recipient (The one who is paying fiat gets the crypto)
+    const recipientId = trade.side === 'BUY' ? trade.userId : trade.merchantId;
+    const recipientAddress = await resolveUserCryptoAddress(recipientId, trade.currencyTarget);
+
+      try {
         // 1️⃣ External settlement: Master Wallet -> Recipient (net amount only)
      const transferResult = await blockrader.transferFunds(
     blockrader.BLOCKRADER_MASTER_WALLET_UUID, // Source (Master)
@@ -675,12 +584,9 @@ if (!validStatuses.includes(trade.status)) {
                 trade._id,
                 ALLOWED_STATES.COMPLETED,
                 {
-                    // message: settlementMessage,
-                    // actor: merchantId,
-                    // role: "merchant",
                     message: isAdminAction ? `ADMIN RESOLUTION: ${settlementMessage}` : settlementMessage,
-                    actor: merchantId, 
-                    role: isAdminAction ? "admin" : "merchant", // Logs as admin role if overridden
+                    actor: requesterId, 
+                    role: isAdminAction ? "admin" : (trade.side === 'BUY' ? "merchant" : "user"), // Logs as admin role if overridden
                     ip,
                 },
                 trade.status,
@@ -730,7 +636,6 @@ await FeeLog.create([{
         throw error;
     }
 },
-
 async cancelTrade(reference, userId, ip = null) {
     if (!reference) throw new TradeError("Reference required");
 
@@ -856,7 +761,6 @@ async cancelTrade(reference, userId, ip = null) {
         throw error;
     }
 },
-
 // ✅ Auto-open disputes when buyer goes silent
 async autoOpenDisputesForSilentBuyers() {
     const TIMEOUT_MINUTES = 30;
@@ -881,7 +785,6 @@ async autoOpenDisputesForSilentBuyers() {
 
     return { processed: stuckTrades.length };
 },
-
 // ✅ Admin resolves dispute
 async adminResolveTrade(reference, action, adminId, ip = null) {
     const admin = await checkUser(adminId);
@@ -896,28 +799,46 @@ async adminResolveTrade(reference, action, adminId, ip = null) {
         throw new TradeError("Trade is not under dispute", 409);
     }
 
+    let resolvedTrade;
+
     if (action === "RELEASE") {
-        // Force settlement (reuse existing flow)
-        return await this.confirmMerchantPayment(
+        resolvedTrade = await this.confirmAndReleaseCrypto(
             reference,
             trade.merchantId,
             "ADMIN_OVERRIDE",
             ip
         );
+
+        setImmediate(() => {
+            notifyUserOfAdminResolution(resolvedTrade._id, "RELEASED");
+            notifyMerchantOfAdminResolution(resolvedTrade._id, "RELEASED");
+        });
+
+        return resolvedTrade;
     }
 
-    if (action === "CANCEL") {
-        return await this.cancelTrade(reference, adminId, ip);
+   if (action === "CANCEL") {
+        resolvedTrade = await this.cancelTrade(reference, adminId, ip);
+
+        setImmediate(() => {
+            notifyUserOfAdminResolution(resolvedTrade._id, "CANCELLED");
+            notifyMerchantOfAdminResolution(resolvedTrade._id, "CANCELLED");
+        });
+
+        return resolvedTrade;
     }
 
     throw new TradeError("Invalid admin action", 400);
 },
 
-    async getTradeByReference(reference) {
-        return await P2PTrade.findOne({ reference }).populate("userId", "firstName email role").populate("merchantId", "firstName email role").lean();
-    },
+async getTradeByReference(reference) {
+  return await P2PTrade.findOne({ reference })
+    .populate("userId", "firstName email role")
+    .populate("merchantId", "firstName email role")
+    .lean();
+},
 
-    async listTrades(filter = {}, page = 1, pageSize = 20) {
+async listTrades(filter = {}, page = 1, pageSize = 20) {
         const q = {};
         if (filter.status) q.status = filter.status;
         if (filter.userId) q.userId = filter.userId;

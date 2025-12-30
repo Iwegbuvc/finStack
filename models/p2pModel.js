@@ -158,6 +158,13 @@ const P2PTradeSchema = new mongoose.Schema(
       index: true,
     },
 
+    paymentDetails: {
+        bankName: { type: String },
+        accountNumber: { type: String },
+        accountName: { type: String },
+        bankCode: { type: String },
+        country: { type: String, default: "NG" }
+    },
     // =====================
     // OPTIONAL METADATA
     // =====================

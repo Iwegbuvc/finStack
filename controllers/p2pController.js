@@ -147,55 +147,108 @@ const buyerConfirmPayment = async (req, res) => {
   }
 }
 // // 3a. Initiate Merchant Confirm Payment (POST /trade/:reference/initiate-merchant-payment-confirmation)
-const initiateMerchantConfirmPayment = async (req, res) => {
-  try {
-    const merchantId = req.user.id;
-    const { reference } = req.params;
-    const ip = req.ip;
-    
-    if (!reference) {
-      return handleServiceError(res, new Error("Trade reference is required in the URL path."));
-    }
+// const initiateMerchantConfirmPayment = async (req, res) => {
+//   try {
+//     const merchantId = req.user.id;
+//     const { reference } = req.params;
+//     const ip = req.ip;
+//     
+//     if (!reference) {
+//       return handleServiceError(res, new Error("Trade reference is required in the URL path."));
+//     }
 
-    // Call the new service function to send the OTP
-    const result = await p2pService.initiateMerchantPaymentConfirmation(reference, merchantId, ip);
+//     // Call the new service function to send the OTP
+//     const result = await p2pService.initiateMerchantPaymentConfirmation(reference, merchantId, ip);
 
-    res.status(200).json({
-      message: result.message,
-      success: true,
-    });
-  } catch (error) {
-    handleServiceError(res, error);
-  }
+//     res.status(200).json({
+//       message: result.message,
+//       success: true,
+//     });
+//   } catch (error) {
+//     handleServiceError(res, error);
+//   }
+// };
+// 3a. Seller initiates crypto release (OTP)
+const initiateSettlementOTP = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const { reference } = req.params;
+
+    if (!reference) {
+      return handleServiceError(res, new Error("Trade reference is required."));
+    }
+
+    const result = await p2pService.initiateSettlementOTP(reference, requesterId);
+
+    return res.status(200).json({
+      success: true,
+      message: result.message
+    });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
 };
+
 // 3b. Merchant confirms payment with OTP (POST /trade/:reference/confirm-merchant-payment)
-const merchantConfirmPayment = async (req, res) => {
-  try {
-    const merchantId = req.user.id;
-    const { reference } = req.params;
-    // 💡 NEW: OTP Code is now required in the request body
-    const { otpCode } = req.body; 
-    const ip = req.ip;
-    
-    if (!reference) {
-      return handleServiceError(res, new Error("Trade reference is required in the URL path."));
-    }
-    if (!otpCode) {
-        return res.status(400).json({ success: false, message: "OTP code is required to complete settlement." });
-    }
+// const merchantConfirmPayment = async (req, res) => {
+//   try {
+//     const merchantId = req.user.id;
+//     const { reference } = req.params;
+//     // 💡 NEW: OTP Code is now required in the request body
+//     const { otpCode } = req.body; 
+//     const ip = req.ip;
+//     
+//     if (!reference) {
+//       return handleServiceError(res, new Error("Trade reference is required in the URL path."));
+//     }
+//     if (!otpCode) {
+//         return res.status(400).json({ success: false, message: "OTP code is required to complete settlement." });
+//     }
 
-    // Call the service with the new otpCode argument
-    // NOTE: The service layer still handles destination lookup from the Wallet model
-    const trade = await p2pService.confirmMerchantPayment(reference, merchantId, otpCode, ip); 
+//     // Call the service with the new otpCode argument
+//     // NOTE: The service layer still handles destination lookup from the Wallet model
+//     const trade = await p2pService.confirmMerchantPayment(reference, merchantId, otpCode, ip); 
 
-    res.status(200).json({
-      message: "Trade successfully settled. Escrow released to respective parties.",
-      data: trade,
-    });
-  } catch (error) {
-    handleServiceError(res, error);
-  }
+//     res.status(200).json({
+//       message: "Trade successfully settled. Escrow released to respective parties.",
+//       data: trade,
+//     });
+//   } catch (error) {
+//     handleServiceError(res, error);
+//   }
+// };
+// 3b. Seller confirms OTP & releases crypto
+const confirmAndReleaseCrypto = async (req, res) => {
+  try {
+    const requesterId = req.user.id;
+    const { reference } = req.params;
+    const { otpCode } = req.body;
+    const ip = req.ip;
+
+    if (!reference || !otpCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Reference and OTP code are required."
+      });
+    }
+
+    const trade = await p2pService.confirmAndReleaseCrypto(
+      reference,
+      requesterId,
+      otpCode,
+      ip
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Crypto released successfully.",
+      data: trade
+    });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
 };
+
 // 4. Cancel trade (DELETE /trade/:reference/cancel)
 const cancelTrade = async (req, res) => {
   try {
@@ -239,14 +292,74 @@ const adminResolveTrade = async (req, res) => {
   }
 };
 
-// Using the concise export syntax, and only exporting the functions intended for the router.
+const getTradeDetails = async (req, res) => {
+  try {
+    const { reference } = req.params;
+    
+    // 1. Ensure currentUserId is a string for reliable comparison
+    const currentUserId = req.user.id.toString(); 
+    const currentUserRole = req.user.role;
+
+    const trade = await p2pService.getTradeByReference(reference);
+
+    if (!trade) {
+      return res.status(404).json({ success: false, message: "Trade not found." });
+    }
+
+    // 2. Extract IDs safely from populated objects
+    // Using ?. and .toString() ensures we compare "68fcd..." === "68fcd..."
+    const tradeUserId = trade.userId?._id?.toString() || trade.userId?.toString();
+    const tradeMerchantId = trade.merchantId?._id?.toString() || trade.merchantId?.toString();
+
+    const isUser = currentUserId === tradeUserId;
+    const isMerchant = currentUserId === tradeMerchantId;
+    const isAdmin = currentUserRole === 'admin';
+
+    /**
+     * 🔐 BANK INFO VISIBILITY RULE:
+     * Only the Buyer, Seller, or Admin should see bank details.
+     */
+    if (!isUser && !isMerchant && !isAdmin) {
+      trade.paymentDetails = null;
+    }
+
+    // 🔒 Mask emails for privacy
+    if (trade.userId?.email) {
+      trade.userId.email = maskEmail(trade.userId.email);
+    }
+    if (trade.merchantId?.email) {
+      trade.merchantId.email = maskEmail(trade.merchantId.email);
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: trade
+    });
+
+  } catch (error) {
+    handleServiceError(res, error);
+  }
+};
+
+
+// Helper
+function maskEmail(email) {
+  if (!email) return "";
+  const [name, domain] = email.split('@');
+  return `${name.substring(0, 2)}***@${domain}`;
+}
+
+
 module.exports = {
   createTrade,
   buyerConfirmPayment,
-  initiateMerchantConfirmPayment,
-   merchantConfirmPayment,
+  // initiateMerchantConfirmPayment,
+  //  merchantConfirmPayment,
+  initiateSettlementOTP,
+  confirmAndReleaseCrypto,
   cancelTrade,
   createUsdWallet,
   merchantMarkPaid,
-  adminResolveTrade
+  adminResolveTrade,
+  getTradeDetails
 };

@@ -518,5 +518,47 @@ const generateBuyerPaidMail = ({ firstName, reference, amount }) => ({
   text: `Buyer marked payment as sent. Ref: ${reference}`
 });
 
+// Inside mailGenerator.js
+const generateMerchantPaidMail = ({ firstName, reference, amount, currency }) => ({
+  subject: "Merchant has marked payment as sent",
+  html: `
+    <p>Hello ${firstName},</p>
+    <p>The merchant has marked your P2P trade as <strong>Paid</strong>.</p>
+    <p><strong>Amount to receive:</strong> ${amount} ${currency}</p>
+    <p><strong>Trade Ref:</strong> ${reference}</p>
+    <p>Please check your bank account. Once confirmed, log in to release the crypto assets.</p>
+  `,
+  text: `Hello ${firstName}, the merchant has marked trade ${reference} as paid. Please verify the receipt of ${amount} ${currency}.`
+});
 
-module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail, generateTradeAlertMail, generateBuyerPaidMail };
+const generateAdminResolutionMail = ({
+  firstName,
+  reference,
+  outcome, // "RELEASED" | "CANCELLED"
+  role,    // "buyer" | "merchant"
+}) => {
+  const actionText =
+    outcome === "RELEASED"
+      ? "has been completed and crypto has been released"
+      : "has been cancelled and funds have been reversed";
+
+  return {
+    subject: `P2P Trade ${reference} — Admin Resolution`,
+    text: `Hello ${firstName},
+Your P2P trade (${reference}) ${actionText} following an admin review.
+
+If you have questions, please contact support.`,
+    html: `
+      <p>Hello ${firstName},</p>
+      <p>
+        Your P2P trade <strong>${reference}</strong>
+        ${actionText} following an <strong>admin dispute resolution</strong>.
+      </p>
+      <p>
+        If you have any questions, please contact support.
+      </p>
+    `
+  };
+};
+
+module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail, generateTradeAlertMail, generateBuyerPaidMail, generateMerchantPaidMail,generateAdminResolutionMail};
