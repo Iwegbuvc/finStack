@@ -292,6 +292,27 @@ const adminResolveTrade = async (req, res) => {
   }
 };
 
+const getAllDisputes = async (req, res) => {
+  try {
+    // Only admins should access this (logic usually handled in middleware, but good to be safe)
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const data = await p2pService.listDisputes(page, limit);
+
+    res.status(200).json({
+      success: true,
+      ...data
+    });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
+};
+
 const getTradeDetails = async (req, res) => {
   try {
     const { reference } = req.params;
@@ -361,5 +382,6 @@ module.exports = {
   createUsdWallet,
   merchantMarkPaid,
   adminResolveTrade,
+  getAllDisputes,
   getTradeDetails
 };

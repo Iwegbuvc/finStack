@@ -286,6 +286,41 @@ const getAllKycRecords = async (req, res) => {
         });
     }
 };
+/* ===========  ADMIN: Get Pending KYC Records   =========== */
+const getPendingKycRecords = async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+        const skip = (page - 1) * limit;
+
+        const pendingKycs = await Kyc.find({ status: "PENDING" })
+            .populate("user_id", "email firstName lastName")
+            .sort({ createdAt: 1 }) // Oldest first so they can be processed in order
+            .skip(skip)
+            .limit(limit);
+
+        const totalPending = await Kyc.countDocuments({ status: "PENDING" });
+
+        return res.status(200).json({
+            success: true,
+            message: "Pending KYC records fetched successfully",
+            pagination: {
+                total: totalPending,
+                currentPage: page,
+                totalPages: Math.ceil(totalPending / limit),
+                limit
+            },
+            data: pendingKycs,
+        });
+    } catch (error) {
+        console.error("❌ Error fetching pending KYC records:", error);
+        return res.status(500).json({
+            success: false,
+            message: "Internal server error",
+            error: error.message,
+        });
+    }
+};
 /* ==========   USER/ADMIN: Get Single KYC Record  ==========  */
 const getSingleKyc = async (req, res) => {
     try {
@@ -601,4 +636,53 @@ const updateFlatFee = async (req, res) => {
   res.json({ success: true, message: "Flat fee updated successfully" });
 };
 
-module.exports = {createAnnouncementAndSendMail,getAllUsers,getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc,getPlatformVolume, getAllTransactions,adminSetPlatformFees, getAllTrades, getTradeDetails, getFeeSummary, updateFlatFee};
+// ========== ADMIN: Get Admin Dashboard Stats ========== */
+const getAdminDashboardStats = async (req, res) => {
+  try {
+    // We run these in parallel to save time
+    const [
+      totalUsers,
+      suspendedUsers,
+      pendingKyc,
+      walletAggregation
+    ] = await Promise.all([
+      // 1. Total number of users
+      User.countDocuments(),
+
+      // 2. Suspended accounts
+      User.countDocuments({ status: "suspended" }),
+
+      // 3. KYCs with PENDING status
+      Kyc.countDocuments({ status: "PENDING" }),
+
+      // 4. Sum of all balances across all user wallets
+      Wallet.aggregate([
+        {
+          $group: {
+            _id: null, // Group all together
+            totalBalance: { $sum: "$balance" }
+          }
+        }
+      ])
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        totalUsers,
+        suspendedUsers,
+        pendingKyc,
+        totalPlatformBalance: walletAggregation[0]?.totalBalance || 0
+      }
+    });
+
+  } catch (error) {
+    console.error("Dashboard Stats Error:", error);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to fetch dashboard statistics" 
+    });
+  }
+};
+
+module.exports = {createAnnouncementAndSendMail, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, getPendingKycRecords, getPlatformVolume, getAllTransactions,adminSetPlatformFees, getAllTrades, getTradeDetails, getFeeSummary, updateFlatFee, getAdminDashboardStats};

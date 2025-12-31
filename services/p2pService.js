@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const P2PTrade = require("../models/p2pModel");
+const Transaction = require("../models/transactionModel");
 const User = require("../models/userModel");
 const Wallet = require("../models/walletModel");
 const blockrader = require("./providers/blockrader");
@@ -90,6 +91,38 @@ const currencyValue = normalize(currency);
     }
     return wallet.walletAddress;
 }
+
+// --------- Ledger Helpers ----------
+
+// Resolve MongoDB wallet _id (NOT externalWalletId)
+async function resolveWalletObjectId(userId, currency) {
+    const wallet = await Wallet.findOne({
+        user_id: new mongoose.Types.ObjectId(userId),
+        currency: normalize(currency),
+        walletType: "USER",
+        provider: "BLOCKRADAR",
+        status: "ACTIVE"
+    }).select('_id').lean();
+
+    if (!wallet) {
+        throw new TradeError(`Local wallet not found for ${currency}`, 404);
+    }
+    return wallet._id;
+}
+
+// Idempotent ledger writer (NO upsert, safe for finance)
+async function createIdempotentTransaction(data, session) {
+    try {
+        await Transaction.create([data], { session });
+    } catch (err) {
+        if (err.code === 11000) {
+            // Duplicate idempotencyKey → safe retry
+            return;
+        }
+        throw err;
+    }
+}
+
 // --------- Service functions ----------
 module.exports = {  
 async getAllUserWalletBalances(userId) {
@@ -321,13 +354,6 @@ async confirmBuyerPayment(reference, buyerId, ip = null) {
   }
 
   // Status guard
-  // if (trade.status !== ALLOWED_STATES.INIT) {
-  //   throw new TradeError(
-  //     `Cannot confirm payment in status: ${trade.status}`,
-  //     409
-  //   );
-  // }
-
   const validStatuses = [
   ALLOWED_STATES.INIT,
   ALLOWED_STATES.MERCHANT_PAID
@@ -399,6 +425,19 @@ if (!validStatuses.includes(trade.status)) {
         trade.status,
         session
       );
+
+      // 🔑 ADD THIS BLOCK (ESCROW LEDGER)
+await createIdempotentTransaction({
+  idempotencyKey: `P2P:${trade._id}:ESCROW`,
+  walletId: await resolveWalletObjectId(escrowSourceUserId, trade.currencyTarget),
+  userId: escrowSourceUserId,
+  type: "P2P_ESCROW",
+  amount: -trade.amountCrypto, // 🔴 DEBIT
+  currency: trade.currencyTarget,
+  status: "COMPLETED",
+  reference: trade.reference,
+  metadata: { p2pTradeId: trade._id }
+}, session);
 
       await session.commitTransaction();
 
@@ -592,6 +631,33 @@ async confirmAndReleaseCrypto(reference, requesterId, otpCode, ip = null) {
                 trade.status,
                 session
             );
+            // 🔑 ADD: RELEASE LEDGER (recipient gets crypto)
+await createIdempotentTransaction({
+  idempotencyKey: `P2P:${trade._id}:RELEASE`,
+  walletId: await resolveWalletObjectId(recipientId, trade.currencyTarget),
+  userId: recipientId,
+  type: "P2P_RELEASE",
+  amount: trade.netCryptoAmount, // 🟢 CREDIT
+  currency: trade.currencyTarget,
+  status: "COMPLETED",
+  reference: trade.reference,
+  metadata: { p2pTradeId: trade._id }
+}, session);
+
+// 🔑 ADD: FEE LEDGER (merchant pays fee)
+if (trade.platformFeeCrypto > 0) {
+  await createIdempotentTransaction({
+    idempotencyKey: `P2P:${trade._id}:FEE`,
+    walletId: await resolveWalletObjectId(trade.merchantId, trade.currencyTarget),
+    userId: trade.merchantId,
+    type: "P2P_FEE",
+    amount: -trade.platformFeeCrypto, // 🔴 DEBIT
+    currency: trade.currencyTarget,
+    status: "COMPLETED",
+    reference: trade.reference,
+    metadata: { p2pTradeId: trade._id }
+  }, session);
+}
 await FeeLog.create([{
         userId: trade.merchantId, 
         transactionId: trade._id,
@@ -733,6 +799,21 @@ async cancelTrade(reference, userId, ip = null) {
                 trade.status,
                 session
             );
+            
+// 🔑 ADD: REFUND LEDGER
+if (requiresEscrowReversal) {
+  await createIdempotentTransaction({
+    idempotencyKey: `P2P:${trade._id}:REFUND`,
+    walletId: await resolveWalletObjectId(refundRecipientId, trade.currencyTarget),
+    userId: refundRecipientId,
+    type: "P2P_REFUND",
+    amount: trade.amountCrypto, // 🟢 CREDIT
+    currency: trade.currencyTarget,
+    status: "COMPLETED",
+    reference: trade.reference,
+    metadata: { p2pTradeId: trade._id }
+  }, session);
+}
 
             await session.commitTransaction();
 
@@ -830,7 +911,29 @@ async adminResolveTrade(reference, action, adminId, ip = null) {
 
     throw new TradeError("Invalid admin action", 400);
 },
+// ✅ List disputes for admin review
+async listDisputes(page = 1, pageSize = 20) {
+    const query = { status: "DISPUTE_PENDING" };
 
+    const [disputes, total] = await Promise.all([
+        P2PTrade.find(query)
+            .populate("userId", "firstName lastName email")
+            .populate("merchantId", "firstName lastName email")
+            .sort({ updatedAt: -1 }) // Show most recent disputes first
+            .skip((page - 1) * pageSize)
+            .limit(pageSize)
+            .lean(),
+        P2PTrade.countDocuments(query)
+    ]);
+
+    return {
+        disputes,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize)
+    };
+},
 async getTradeByReference(reference) {
   return await P2PTrade.findOne({ reference })
     .populate("userId", "firstName email role")

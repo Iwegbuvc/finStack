@@ -3,6 +3,7 @@ const logger = require('../utilities/logger');
 const FeeConfig = require("../models/feeConfigModel");
 const Wallet = require("../models/walletModel");
 const { getWalletBalance } = require("../services/providers/blockrader");
+const p2pService = require("../services/p2pService"); // Ensure the path to your service file is correct
 
 // Create a new Merchant Ad
 const createMerchantAd = async (req, res) => {
@@ -355,11 +356,37 @@ ad.platformFeeCrypto = Number(
     res.status(500).json({ success: false, message: "Internal server error" });
   }
 };
+// Get merchant orders
+const getMerchantOrders = async (req, res) => {
+  console.log("REQ.USER:", req.user);
+console.log("MERCHANT ID:", req.user?.id);
+
+  try {
+    const merchantId = req.user.id;
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 20;
+    const { status } = req.query;
+
+    const filter = { merchantId };
+    if (status) filter.status = status;
+
+    const result = await p2pService.listTrades(filter, page, limit);
+
+    res.status(200).json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    logger.error("Error getting merchant orders:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
 
   module.exports = {
     createMerchantAd,
     getAllAds,
     getMerchantAds,
     updateMerchantAd,
-    deactivateAd
+    deactivateAd,
+    getMerchantOrders
   }

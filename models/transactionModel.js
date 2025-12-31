@@ -28,13 +28,16 @@ const transactionSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["DEPOSIT", "WITHDRAWAL", "TRANSFER_IN", "TRANSFER_OUT"],
+      enum: ["DEPOSIT", "WITHDRAWAL", "TRANSFER_IN", "TRANSFER_OUT", "P2P_ESCROW",
+    "P2P_RELEASE",
+    "P2P_FEE",
+    "P2P_REFUND",] ,
       required: true,
     },
     amount: {
       type: Number,
       required: true,
-      min: 0,
+      // min: 0,
     },
     currency: {
       type: String,
@@ -47,7 +50,7 @@ const transactionSchema = new mongoose.Schema(
     },
     reference: {
       type: String,
-      unique: true,
+      // unique: true,
       required: true,
     },
     txHash: {
@@ -61,6 +64,11 @@ const transactionSchema = new mongoose.Schema(
     blockradarWalletId: {
       type: String, // to map which Blockradar wallet it came from
     },
+    idempotencyKey: {
+  type: String,
+  required: true,
+},
+
     metadata: {
       type: Object,
       default: {},
@@ -78,5 +86,10 @@ transactionSchema.index({ userId: 1 });
 transactionSchema.index({ walletId: 1 });
 transactionSchema.index({ type: 1 });
 transactionSchema.index({ createdAt: -1 });
+transactionSchema.index(
+  { idempotencyKey: 1 },
+  { unique: true }
+);
+
 
 module.exports = mongoose.model("Transaction", transactionSchema);

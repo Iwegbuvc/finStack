@@ -1,5 +1,105 @@
 const UserBankAccount = require("../models/userBankAccountModel");
+const User = require("../models/userModel");
 
+const getAllUsers = async (req, res) => {
+  try {
+    // 1. Admin Authorization Guard
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: "Admin access required" });
+    }
+
+    // 2. Pagination Logic
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 20;
+    const skip = (page - 1) * limit;
+
+    // 3. Search/Filter (Optional but useful)
+    const { role, isVerified } = req.query;
+    const filter = {};
+    if (role) filter.role = role;
+    if (isVerified) filter.isVerified = isVerified === 'true';
+
+    // 4. Parallel Execution for Speed
+    const [users, total] = await Promise.all([
+      User.find(filter)
+        .select("-password -refreshToken -verificationCode -resetPasswordToken") // 🛡️ Security: Exclude sensitive fields
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(filter)
+    ]);
+
+    res.status(200).json({
+      success: true,
+      data: users,
+      pagination: {
+        totalUsers: total,
+        currentPage: page,
+        totalPages: Math.ceil(total / limit),
+        pageSize: limit
+      }
+    });
+
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
+// Get current logged-in user's details
+const getMe = async (req, res) => {
+  try {
+    // req.user.id comes from your verifyToken middleware
+    const user = await User.findById(req.user.id).select("-password -refreshToken");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: user
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// Update current logged-in user's information
+const updateMe = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Define which fields are allowed to be updated
+    const { firstName, lastName, phoneNumber } = req.body;
+    
+    // Construct update object
+    const updateData = {};
+    if (firstName) updateData.firstName = firstName;
+    if (lastName) updateData.lastName = lastName;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    ).select("-password -refreshToken");
+
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: updatedUser
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// Add a new bank account and set it as primary
 const addUserBank = async (req, res) => {
   try {
     const { bankName, accountNumber, accountName, bankCode } = req.body;
@@ -31,4 +131,4 @@ const addUserBank = async (req, res) => {
   }
 };
 
-module.exports = addUserBank;
+module.exports = { addUserBank, getAllUsers, getMe, updateMe };

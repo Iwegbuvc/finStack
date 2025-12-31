@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { verifyToken } = require("../middlewares/validateToken");
 const { merchantOnly, allowRoles } = require("../middlewares/auth");
-const {createMerchantAd, getAllAds, getMerchantAds, deactivateAd, updateMerchantAd,} = require("../controllers/merchantController");
+const {createMerchantAd, getAllAds, getMerchantAds, deactivateAd, updateMerchantAd, getMerchantOrders,} = require("../controllers/merchantController");
 
 //  PUBLIC ROUTES
 // Anyone (no token required) can view all active ads.
@@ -15,5 +15,13 @@ router.patch("/ads/:id/deactivate", verifyToken, merchantOnly, deactivateAd); //
 
 //  ADMIN OR MERCHANT ROUTES
 router.get("/all-ads", verifyToken, allowRoles("admin", "merchant"), getMerchantAds);
+
+router.get(
+  "/orders",
+  verifyToken,
+  merchantOnly,
+  getMerchantOrders
+);
+
 
 module.exports = router;

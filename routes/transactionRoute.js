@@ -1,6 +1,6 @@
 const express = require("express");
-const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const { getUserTransactions,getAllTransactions, } = require("../controllers/transactionController");
+const { verifyToken} = require("../middlewares/validateToken");
+const { getUserTransactions } = require("../controllers/transactionController");
 
 const router = express.Router();
 
