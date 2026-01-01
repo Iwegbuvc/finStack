@@ -42,33 +42,34 @@
   // };
   //  📡 Handle incoming Blockradar webhooks (PUSH NOTIFICATIONS)
 const handleBlockradarWebhook = async (req, res) => {
-    try {
-        const event = req.body;
-        const eventData = event.data;
+  try {
+    const payload = req.body;
 
-        // Map Blockradar fields to your internal structure
-        const normalizedData = {
-            ...eventData,
-            amount: eventData.amountPaid, // "10.0" from sample payload
-            walletId: eventData.wallet?.id || eventData.addressId,
-            asset: eventData.currency || "USDC",
-            reference: eventData.reference
-        };
-
-        switch (event.event) {
-            case "deposit.success":
-            case "deposit.confirmed":
-                await handleDepositConfirmed(normalizedData);
-                break;
-            case "withdraw.success":
-                await handleWithdrawSuccess(normalizedData);
-                break;
-        }
-
-        res.status(200).json({ received: true });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    if (!payload?.event) {
+      return res.status(400).json({ error: "Invalid payload" });
     }
+
+    switch (payload.event) {
+      case "deposit.success":
+        await handleDepositConfirmed(payload);
+        break;
+
+      case "withdraw.success":
+        await handleWithdrawSuccess(payload);
+        break;
+
+      default:
+        console.log(`ℹ️ Unhandled Blockradar event: ${payload.event}`);
+    }
+
+    // ALWAYS acknowledge Blockradar
+    return res.status(200).json({ received: true });
+  } catch (error) {
+    console.error("Blockradar webhook error:", error.message);
+
+    // Still return 200 to prevent retries
+    return res.status(200).json({ received: true });
+  }
 };
 
 const handlePaycrestWebhook = async (req, res) => {

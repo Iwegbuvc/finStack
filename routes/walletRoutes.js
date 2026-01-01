@@ -1,9 +1,11 @@
-const { initiateWithdrawal, submitPaycrestWithdrawal, getDashboardBalances, submitCryptoWithdrawal} = require("../controllers/walletController");
+const { createDeposit, initiateWithdrawal, submitPaycrestWithdrawal, getDashboardBalances, submitCryptoWithdrawal} = require("../controllers/walletController");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
 const { walletLimiter, transactionLimiter } = require("../middlewares/rateLimiter");
 
 const router = require("express").Router();
 
+
+router.post("/deposit", verifyToken, createDeposit);
 router.get("/wallet/user-balances", verifyToken, getDashboardBalances);
 // (PHASE 1: INITIATE WITHDRAWAL/SEND OTP)
 // This is the first step, sending the request and receiving the OTP.

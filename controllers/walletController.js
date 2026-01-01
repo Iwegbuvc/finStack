@@ -9,6 +9,7 @@ const { createWithdrawalRequest } = require('../services/withdrawalInterService'
 const { initiateCryptoTransfer } = require('../services/cryptoTransServicePc'); 
 const Transaction = require("../models/transactionModel"); // Needed for the non-atomic update
 const { withdrawFromBlockrader } = require('../services/providers/blockrader');
+const blockradar = require("../services/providers/blockrader");
 
 const getDashboardBalances = async (req, res) => {
   try {
@@ -29,6 +30,59 @@ const getDashboardBalances = async (req, res) => {
         // For development, you can uncomment the line below:
         debugMessage: error.message 
     });
+  }
+};
+// DEPOSIT FUNCTIONS 
+const createDeposit = async (req, res) => {
+  try {
+    const userId = req.user.id; // from JWT
+    const { currency = "USDC", network = "Base" } = req.body;
+
+    // 1️⃣ Resolve internal wallet
+    const wallet = await Wallet.findOne({ user_id: userId });
+    if (!wallet) {
+      return res.status(404).json({ error: "Wallet not found" });
+    }
+
+    // 2️⃣ Request deposit address from Blockradar
+    const depositAddress = await blockradar.createDepositAddress({
+      currency,
+      network,
+      metadata: {
+        user_id: userId, // 🔑 THIS is what comes back in webhook
+      },
+    });
+
+    /**
+     * Example Blockradar response:
+     * {
+     *   id: "addr_123",
+     *   address: "0xABC...",
+     *   network: "Base",
+     *   currency: "USDC"
+     * }
+     */
+
+    // 3️⃣ Persist address mapping
+    wallet.depositAddresses.push({
+      provider: "BLOCKRADAR",
+      addressId: depositAddress.id,
+      address: depositAddress.address,
+      currency,
+      network,
+    });
+
+    await wallet.save();
+
+    // 4️⃣ Return to frontend
+    res.status(200).json({
+      address: depositAddress.address,
+      currency,
+      network,
+    });
+  } catch (error) {
+    console.error("Create deposit error:", error.message);
+    res.status(500).json({ error: "Failed to create deposit" });
   }
 };
 // 1️⃣ STEP 1: INITIATION (Request OTP)
@@ -276,4 +330,4 @@ const submitCryptoWithdrawal = async (req, res) => {
     }
 };
 
-module.exports = {getDashboardBalances, initiateWithdrawal, submitPaycrestWithdrawal,submitCryptoWithdrawal,};
+module.exports = {getDashboardBalances, createDeposit, initiateWithdrawal, submitPaycrestWithdrawal,submitCryptoWithdrawal,};

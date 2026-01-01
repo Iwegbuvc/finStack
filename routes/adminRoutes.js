@@ -1,8 +1,8 @@
 const express = require("express");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const { createAnnouncementAndSendMail, updateFlatFee } = require('../controllers/adminController');
+const { createAnnouncementAndSendMail, setFee } = require('../controllers/adminController');
 const p2pController = require("../controllers/p2pController");
-const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getPendingKycRecords, getAllKycRecords, getSingleKyc, adminSetPlatformFees, getFeeSummary, getPlatformVolume, getAdminDashboardStats,} = require("../controllers/adminController");
+const { getAllTrades, getTradeDetails, getAllTransactions, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getPendingKycRecords, getAllKycRecords, getSingleKyc, getFeeSummary, getPlatformVolume, getAdminDashboardStats,} = require("../controllers/adminController");
 
 const router = express.Router();
 
@@ -26,7 +26,9 @@ router.get("/admin/pending-kycs", verifyToken, isAdmin, getPendingKycRecords);
 // 5. FIX: Now uses the imported function getAllKycRecords directly
 router.get("/admin/getAllKycs", verifyToken, isAdmin, getAllKycRecords);
 
-router.post('/admin/setFees', verifyToken, isAdmin, adminSetPlatformFees);
+// router.post('/admin/setFees', verifyToken, isAdmin, adminSetPlatformFees);
+// ... under your existing admin routes
+router.post("/admin/fees-update", verifyToken, isAdmin, setFee);
 // Admin trade management 
 router.get("/admin/trades", verifyToken, isAdmin, getAllTrades);
 router.post("/admin/resolve-trade/:reference", verifyToken, isAdmin, p2pController.adminResolveTrade);
@@ -38,7 +40,7 @@ router.get("/admin/all-transaction", verifyToken, isAdmin, getAllTransactions);
 
 router.get("/admin/fees", verifyToken, isAdmin, getFeeSummary);
 
-router.post("/admin/updateCharges", verifyToken, isAdmin, updateFlatFee);
+// router.post("/admin/updateCharges", verifyToken, isAdmin, updateFlatFee);
 
 // Admin route for total transaction volume
 router.get("/admin/volume", verifyToken, isAdmin, getPlatformVolume);

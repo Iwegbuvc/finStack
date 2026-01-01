@@ -1,12 +1,43 @@
 const FeeConfig = require('../models/feeConfigModel');
 const FeeHistory = require('../models/feeHistoryModel');
 
-/**
- * GETTER: Used by Transaction Handlers to find the fee
- */
-async function getFlatFee(type, currency) {
-    const config = await FeeConfig.findOne({ type, currency });
+
+// GETTER: Used to find the fee for a specific pair
+async function getFlatFee(type, currency, targetCurrency = null) {
+    const query = { type, currency };
+    if (type === "P2P" && targetCurrency) {
+        query.targetCurrency = targetCurrency.toUpperCase();
+    }
+    const config = await FeeConfig.findOne(query);
     return config ? config.feeAmount.toString() : "0";
+}
+
+// SETTER: Updates or creates a fee
+async function updatePlatformFee({ type, currency, targetCurrency, feeAmount, adminId }) {
+    const asset = currency.toUpperCase();
+    const target = targetCurrency ? targetCurrency.toUpperCase() : null;
+
+    // 1. Find existing to get the oldFee for history
+    const existing = await FeeConfig.findOne({ type, currency: asset, targetCurrency: target });
+
+    // 2. Update or Create the config
+    const updatedFee = await FeeConfig.findOneAndUpdate(
+        { type, currency: asset, targetCurrency: target },
+        { $set: { feeAmount: Number(feeAmount), updatedBy: adminId } },
+        { upsert: true, new: true }
+    );
+
+    // 3. Log to History (This is where your error is likely happening)
+    await FeeHistory.create({
+        type, 
+        currency: asset, 
+        targetCurrency: target,
+        oldFee: existing ? existing.feeAmount : 0,
+        newFee: Number(feeAmount), 
+        updatedBy: adminId // <--- DOUBLE CHECK THIS IS NOT UNDEFINED
+    });
+
+    return updatedFee;
 }
 
 async function setPlatformFees({ type, usdcFee, cngnFee, adminId }) {
@@ -69,4 +100,4 @@ return { message: 'Platform fees updated successfully' };
 }
 
 
-module.exports = { getFlatFee, setPlatformFees };
+module.exports = { getFlatFee, updatePlatformFee, setPlatformFees };

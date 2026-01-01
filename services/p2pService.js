@@ -14,6 +14,7 @@ const FeeConfig = require('../models/feeConfigModel');
 const CACHE_TTL = Number(process.env.BALANCE_CACHE_TTL_SECONDS || 30);
 const { notifyMerchantOfTrade, notifyMerchantBuyerPaid, notifyBuyerOfMerchantPayment, notifyUserOfAdminResolution,
   notifyMerchantOfAdminResolution } = require('../utilities/notificationService');
+  const { getFlatFee } = require('./adminFeeService');
 const UserBankAccount = require("../models/userBankAccountModel")
 
 // 🔑 Inline currency normalizer 
@@ -200,15 +201,21 @@ async initiateTrade(buyerId, merchantAd, data, ip = null) {
   // Liquidity check
   if (cryptoAmount > merchantAd.availableAmount) throw new TradeError("Insufficient ad liquidity");
 
-  // Fetch global P2P fee
-  const globalP2PFee = await FeeConfig.findOne({ type: "P2P", currency: currencyTarget });
-  const platformFeeCrypto = globalP2PFee ? globalP2PFee.feeAmount : 0;
+ // 1. Get and normalize the currencies
+  const asset = normalize(currencyTarget); // e.g., 'CNGN'
+  const localCurrency = normalize(currencySource); // e.g., 'RMB'
+
+  const feeValue = await getFlatFee("P2P", asset, localCurrency);
+// 3. Set the platform fee
+  const platformFeeCrypto = Number(feeValue);
+
   if (platformFeeCrypto < 0 || platformFeeCrypto >= cryptoAmount) {
     throw new TradeError("Invalid platform fee configuration.");
   }
 
   const reference = data.reference || `P2P-${Date.now()}`;
 
+  
   // 🏦 1. FETCH BANK DETAILS (SNAPSHOT) BEFORE STARTING TRANSACTION
   // Side SELL means the user is selling to a BUY ad (Merchant is buying)
   const isUserSelling = (merchantAd.type === 'BUY'); 
@@ -941,7 +948,7 @@ async getTradeByReference(reference) {
     .lean();
 },
 
-async listTrades(filter = {}, page = 1, pageSize = 20) {
+async listTrades(filter = {}, page = 1, pageSize = 20) {    
         const q = {};
         if (filter.status) q.status = filter.status;
         if (filter.userId) q.userId = filter.userId;

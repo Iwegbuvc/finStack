@@ -1,71 +1,170 @@
+const mongoose = require("mongoose");
 const Wallet = require("../models/walletModel");
 const Transaction = require("../models/transactionModel");
 const FeeLog = require("../models/feeLogModel");
 const Decimal = require("decimal.js");
 const { getFlatFee } = require("./adminFeeService");
 
-async function handleDepositConfirmed(eventData = {}) {
-    const grossAmountStr = String(eventData.amount || 0);
-    const currency = eventData.asset || eventData.currency || "USDC";
 
-    const flatFeeValue = await getFlatFee("DEPOSIT", currency);
+async function handleDepositConfirmed(webhookPayload = {}) {
+  if (webhookPayload.event !== "deposit.success") {
+    return null;
+  }
 
-    const wallet = await Wallet.findOne({ externalWalletId: eventData.walletId });
+  const data = webhookPayload.data || {};
+  const {
+    amountPaid,
+    currency = "USDC",
+    senderAddress,
+    recipientAddress,
+    reference,
+    metadata,
+  } = data;
+
+  // -------------------------------
+  // 1. Validate payload
+  // -------------------------------
+  if (!amountPaid || !metadata?.user_id || !reference) {
+    console.warn("⚠️ Invalid Blockradar deposit payload", data);
+    return null;
+  }
+
+  const userId = metadata.user_id;
+
+  // Normalize currency (important)
+  const normalizedCurrency =
+    currency === "USD" ? "USDC" : currency.toUpperCase();
+
+  // -------------------------------
+  // 2. Idempotency check (OUTSIDE transaction)
+  // -------------------------------
+  const existingTx = await Transaction.findOne({
+    reference,
+    type: "DEPOSIT",
+    status: "COMPLETED",
+  });
+
+  if (existingTx) {
+    console.info(`🔁 Duplicate deposit ignored: ${reference}`);
+    return existingTx;
+  }
+
+  // -------------------------------
+  // 3. Start MongoDB session
+  // -------------------------------
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    // -------------------------------
+    // 4. Resolve wallet
+    // -------------------------------
+    const wallet = await Wallet.findOne({ user_id: userId }).session(session);
+
     if (!wallet) {
-        console.warn("⚠️ Deposit for unknown wallet:", eventData.walletId);
-        return null;
+      throw new Error(`Wallet not found for user ${userId}`);
     }
 
-    // --- Decimal.js Logic for Flat Fee ---
-    const grossAmt = new Decimal(grossAmountStr);
-    const feeAmt = new Decimal(flatFeeValue);
-    
-    // Net = Gross - Flat Fee (Ensuring we don't go below zero)
-    let netAmt = grossAmt.sub(feeAmt);
-    if (netAmt.isNegative()) netAmt = new Decimal(0);
+    // -------------------------------
+    // 5. Amount & fee calculation
+    // -------------------------------
+    const grossAmount = new Decimal(amountPaid);
+    if (grossAmount.lte(0)) {
+      throw new Error("Invalid deposit amount");
+    }
 
-    const grossAmount = Number(grossAmt.toString());
-    const feeAmount = Number(feeAmt.toString());
-    const netAmount = Number(netAmt.toString());
+    const flatFeeValue = await getFlatFee("DEPOSIT", normalizedCurrency);
+    const feeAmount = new Decimal(flatFeeValue || 0);
 
-    // Update Wallet Balance
+    if (feeAmount.gt(grossAmount)) {
+      throw new Error("Deposit fee exceeds deposit amount");
+    }
+
+    const netAmount = grossAmount.minus(feeAmount);
+
+    // -------------------------------
+    // 6. Credit wallet (atomic)
+    // -------------------------------
     await Wallet.updateOne(
-        { _id: wallet._id },
-        { $inc: { balance: netAmount } }
+      { _id: wallet._id },
+      { $inc: { balance: Number(netAmount) } },
+      { session }
     );
 
-    // Create Transaction Record
-    const tx = await Transaction.create({
-        walletId: wallet._id,
-        userId: wallet.user_id,
-        type: "DEPOSIT",
-        amount: grossAmount,
-        currency,
-        status: "COMPLETED",
-        reference: eventData.reference || `dep-${Date.now()}`,
-        metadata: { providerData: eventData },
-        feeDetails: {
-            totalFee: feeAmount,
-            platformFee: feeAmount,
+    // -------------------------------
+    // 7. Create transaction record
+    // -------------------------------
+    const tx = await Transaction.create(
+      [
+        {
+          walletId: wallet._id,
+          userId: wallet.user_id,
+          type: "DEPOSIT",
+          amount: Number(grossAmount),
+          netAmount: Number(netAmount),
+          currency: normalizedCurrency,
+          status: "COMPLETED",
+          reference,
+          source: "BLOCKRADAR",
+          metadata: {
+            senderAddress,
+            recipientAddress,
+            rawWebhook: data,
+          },
+          feeDetails: {
+            totalFee: Number(feeAmount),
+            platformFee: Number(feeAmount),
             networkFee: 0,
-            isDeductedFromAmount: true
-        }
-    });
+            isDeductedFromAmount: true,
+          },
+        },
+      ],
+      { session }
+    );
 
-    // Log Fee for Accounting
-    await FeeLog.create({
-        userId: wallet.user_id,
-        transactionId: tx._id,
-        type: "DEPOSIT",
-        currency,
-        grossAmount,
-        feeAmount,
-        platformFee: feeAmount,
-        reference: eventData.reference
-    });
+    // -------------------------------
+    // 8. Fee accounting log
+    // -------------------------------
+    if (feeAmount.gt(0)) {
+      await FeeLog.create(
+        [
+          {
+            userId: wallet.user_id,
+            transactionId: tx[0]._id,
+            type: "DEPOSIT",
+            currency: normalizedCurrency,
+            grossAmount: Number(grossAmount),
+            feeAmount: Number(feeAmount),
+            platformFee: Number(feeAmount),
+            reference,
+            provider: "BLOCKRADAR",
+          },
+        ],
+        { session }
+      );
+    }
 
-    return tx;
+    // -------------------------------
+    // 9. Commit transaction
+    // -------------------------------
+    await session.commitTransaction();
+    session.endSession();
+
+    console.info(
+      `✅ Deposit credited | User: ${userId} | Amount: ${netAmount.toString()} ${normalizedCurrency}`
+    );
+
+    return tx[0];
+  } catch (error) {
+    // ❌ Rollback everything
+    await session.abortTransaction();
+    session.endSession();
+
+    console.error("❌ Deposit transaction failed:", error.message);
+    throw error;
+  }
 }
+
 
 async function handleWithdrawSuccess(eventData = {}) {
     const reference = eventData.reference;

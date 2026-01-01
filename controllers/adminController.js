@@ -9,7 +9,7 @@ const Announcement = require('../models/announcementModel');
 const announcementQueue = require('../utilities/announcementQueue');
 const sanitizeHtml = require('../utilities/sanitizingHtml');
 const { getOrCreateStablecoinAddress, createWalletRecord, createVirtualAccountIfMissing,getTotalTransactionVolume, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
-const { setPlatformFees } = require("../services/adminFeeService");
+const { updatePlatformFee, setPlatformFees } = require("../services/adminFeeService");
 
 
 /* =========== ADMIN: Create Announcement and Send Mail =========== */
@@ -440,17 +440,33 @@ const getPlatformVolume = async (req, res) => {
         });
     }
 };
-const adminSetPlatformFees = async (req, res) => {
-  try {
-  
-    const { type, usdcFee, cngnFee } = req.body;
-    const adminId = req.user.id; 
 
-    const result = await setPlatformFees({ type, usdcFee, cngnFee, adminId });
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
+const setFee = async (req, res) => {
+    try {
+        const { type, currency, targetCurrency, feeAmount } = req.body;
+        
+        // Debugging: Log this to see if it's actually there
+        console.log("Admin ID from request:", req.user?._id || req.user?.id);
+
+        const adminId = req.user?._id || req.user?.id; 
+
+        if (!adminId) {
+            return res.status(401).json({ success: false, message: "Admin ID not found in token" });
+        }
+
+        const result = await updatePlatformFee({
+            type, 
+            currency, 
+            targetCurrency, 
+            feeAmount, 
+            adminId // Passing it to the service
+        });
+
+        res.status(200).json({ success: true, data: result });
+    } catch (error) {
+        console.error("Set Fee Error:", error);
+        res.status(500).json({ error: error.message });
+    }
 };
 // 🧾 Get all P2P trades (filters + pagination) Example: /api/admin/trades?status=COMPLETED&page=1&limit=10
 const getAllTrades = async (req, res) => {
@@ -601,40 +617,40 @@ const getFeeSummary = async (req, res) => {
     }
 };
 // Update P2P FEES
-const updateFlatFee = async (req, res) => {
-  const { currency, flatFee } = req.body;
+// const updateFlatFee = async (req, res) => {
+//   const { currency, flatFee } = req.body;
 
-  if (!currency || flatFee === undefined) {
-    return res.status(400).json({ message: "Currency and flatFee required" });
-  }
+//   if (!currency || flatFee === undefined) {
+//     return res.status(400).json({ message: "Currency and flatFee required" });
+//   }
 
-  if (flatFee < 0) {
-    return res.status(400).json({ message: "Flat fee cannot be negative" });
-  }
+//   if (flatFee < 0) {
+//     return res.status(400).json({ message: "Flat fee cannot be negative" });
+//   }
 
-  const existing = await FeeConfig.findOne({ currency });
+//   const existing = await FeeConfig.findOne({ currency });
 
-  if (existing) {
-    await FeeHistory.create({
-      currency,
-      oldFee: existing.flatFee,
-      newFee: flatFee,
-      updatedBy: req.user.id
-    });
+//   if (existing) {
+//     await FeeHistory.create({
+//       currency,
+//       oldFee: existing.flatFee,
+//       newFee: flatFee,
+//       updatedBy: req.user.id
+//     });
 
-    existing.flatFee = flatFee;
-    existing.updatedBy = req.user.id;
-    await existing.save();
-  } else {
-    await FeeConfig.create({
-      currency,
-      flatFee,
-      updatedBy: req.user.id
-    });
-  }
+//     existing.flatFee = flatFee;
+//     existing.updatedBy = req.user.id;
+//     await existing.save();
+//   } else {
+//     await FeeConfig.create({
+//       currency,
+//       flatFee,
+//       updatedBy: req.user.id
+//     });
+//   }
 
-  res.json({ success: true, message: "Flat fee updated successfully" });
-};
+//   res.json({ success: true, message: "Flat fee updated successfully" });
+// };
 
 // ========== ADMIN: Get Admin Dashboard Stats ========== */
 const getAdminDashboardStats = async (req, res) => {
@@ -685,4 +701,4 @@ const getAdminDashboardStats = async (req, res) => {
   }
 };
 
-module.exports = {createAnnouncementAndSendMail, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, getPendingKycRecords, getPlatformVolume, getAllTransactions,adminSetPlatformFees, getAllTrades, getTradeDetails, getFeeSummary, updateFlatFee, getAdminDashboardStats};
+module.exports = {createAnnouncementAndSendMail, getAllUsers, getAllMerchants, updateUserRole, adminUpdateKycStatus, getAllKycRecords, getSingleKyc, getPendingKycRecords, getPlatformVolume, getAllTransactions, setFee, getAllTrades, getTradeDetails, getFeeSummary, getAdminDashboardStats};

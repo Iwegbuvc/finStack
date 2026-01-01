@@ -3,24 +3,13 @@ const logger = require('../utilities/logger');
 const FeeConfig = require("../models/feeConfigModel");
 const Wallet = require("../models/walletModel");
 const { getWalletBalance } = require("../services/providers/blockrader");
+const { getFlatFee } = require('../services/adminFeeService');
 const p2pService = require("../services/p2pService"); // Ensure the path to your service file is correct
 
 // Create a new Merchant Ad
 const createMerchantAd = async (req, res) => {
   try {
     const userId = req.user.id;
-    // const {
-    //   type,
-    //   asset,
-    //   fiat,
-    //   minLimit,
-    //   maxLimit,
-    //   availableAmount,
-    //   paymentMethods,
-    //   timeLimit,
-    //   instructions,
-    //   autoReply
-    // } = req.body;
 const {
   type,
   minLimit,
@@ -34,6 +23,7 @@ const {
 
 const asset = req.body.asset?.trim().toUpperCase();
 const fiat  = req.body.fiat?.trim().toUpperCase();
+
 
     const price = Number(req.body.price); // FIAT PRICE 
 
@@ -67,16 +57,23 @@ const fiat  = req.body.fiat?.trim().toUpperCase();
     }
 
     // 🔑 CRYPTO-ONLY PLATFORM FEE
-const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
+// const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
 
-if (!feeConfig) {
-  return res.status(400).json({
-    message: `Platform fee not configured for ${asset}`
-  });
-}
+// if (!feeConfig) {
+//   return res.status(400).json({
+//     message: `Platform fee not configured for ${asset}`
+//   });
+// }
 
-const feeRate = feeConfig.feeAmount || 0; 
-const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
+// const feeRate = feeConfig.feeAmount || 0; 
+// const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
+
+
+// Use the same logic as initiateTrade
+const feeValue = await getFlatFee("P2P", asset, fiat);
+const feeRate = Number(feeValue);
+
+const platformFeeCrypto = feeRate;
     // SELL: balance & liquidity checks
     if (type === "SELL") {
       const merchantWallet = await Wallet.findOne({ user_id: userId, currency: asset });
