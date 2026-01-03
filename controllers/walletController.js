@@ -9,7 +9,7 @@ const { createWithdrawalRequest } = require('../services/withdrawalInterService'
 const { initiateCryptoTransfer } = require('../services/cryptoTransServicePc'); 
 const Transaction = require("../models/transactionModel"); // Needed for the non-atomic update
 const { withdrawFromBlockrader } = require('../services/providers/blockrader');
-const blockradar = require("../services/providers/blockrader");
+// const blockradar = require("../services/providers/blockrader");
 
 const getDashboardBalances = async (req, res) => {
   try {
@@ -33,58 +33,101 @@ const getDashboardBalances = async (req, res) => {
   }
 };
 // DEPOSIT FUNCTIONS 
-const createDeposit = async (req, res) => {
-  try {
-    const userId = req.user.id; // from JWT
-    const { currency = "USDC", network = "Base" } = req.body;
+// const createDeposit = async (req, res) => {
+//   try {
+//     const userId = req.user.id; // from JWT
+//     const { currency = "USDC", network = "Base" } = req.body;
 
-    // 1️⃣ Resolve internal wallet
-    const wallet = await Wallet.findOne({ user_id: userId });
-    if (!wallet) {
-      return res.status(404).json({ error: "Wallet not found" });
+//     // 1️⃣ Resolve internal wallet
+//     const wallet = await Wallet.findOne({ user_id: userId });
+//     if (!wallet) {
+//       return res.status(404).json({ error: "Wallet not found" });
+//     }
+
+//     // 2️⃣ Request deposit address from Blockradar
+//     const depositAddress = await blockradar.createDepositAddress({
+//       currency,
+//       network,
+//       metadata: {
+//         user_id: userId, // 🔑 THIS is what comes back in webhook
+//       },
+//     });
+
+//     /**
+//      * Example Blockradar response:
+//      * {
+//      *   id: "addr_123",
+//      *   address: "0xABC...",
+//      *   network: "Base",
+//      *   currency: "USDC"
+//      * }
+//      */
+
+//     // 3️⃣ Persist address mapping
+//     wallet.depositAddresses.push({
+//       provider: "BLOCKRADAR",
+//       addressId: depositAddress.id,
+//       address: depositAddress.address,
+//       currency,
+//       network,
+//     });
+
+//     await wallet.save();
+
+//     // 4️⃣ Return to frontend
+//     res.status(200).json({
+//       address: depositAddress.address,
+//       currency,
+//       network,
+//     });
+//   } catch (error) {
+//     console.error("Create deposit error:", error.message);
+//     res.status(500).json({ error: "Failed to create deposit" });
+//   }
+// };
+const getDepositAddress = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { currency } = req.query;
+
+    if (!currency) {
+      return res.status(400).json({ error: "Currency is required" });
     }
 
-    // 2️⃣ Request deposit address from Blockradar
-    const depositAddress = await blockradar.createDepositAddress({
+    // ✅ ALWAYS filter by currency
+    const wallet = await Wallet.findOne({
+      user_id: userId,
       currency,
-      network,
-      metadata: {
-        user_id: userId, // 🔑 THIS is what comes back in webhook
-      },
+      status: "ACTIVE",
     });
 
-    /**
-     * Example Blockradar response:
-     * {
-     *   id: "addr_123",
-     *   address: "0xABC...",
-     *   network: "Base",
-     *   currency: "USDC"
-     * }
-     */
+    if (!wallet) {
+      return res.status(404).json({
+        error: "Wallet not found for this currency",
+      });
+    }
 
-    // 3️⃣ Persist address mapping
-    wallet.depositAddresses.push({
-      provider: "BLOCKRADAR",
-      addressId: depositAddress.id,
-      address: depositAddress.address,
-      currency,
-      network,
+    if (!wallet.walletAddress) {
+      return res.status(400).json({
+        error: "Deposit address not provisioned yet",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      address: wallet.walletAddress,
+      currency: wallet.currency,
+      network: wallet.network || "BASE",
+      provider: wallet.provider,
+      message: "Send funds only on the specified network.",
     });
 
-    await wallet.save();
-
-    // 4️⃣ Return to frontend
-    res.status(200).json({
-      address: depositAddress.address,
-      currency,
-      network,
-    });
   } catch (error) {
-    console.error("Create deposit error:", error.message);
-    res.status(500).json({ error: "Failed to create deposit" });
+    console.error("Get deposit address error:", error.message);
+    res.status(500).json({ error: "Failed to retrieve deposit address" });
   }
 };
+
 // 1️⃣ STEP 1: INITIATION (Request OTP)
 // IMPLEMENT PAYCREST WITHDRAWAL LOGIC
 const initiateWithdrawal = async (req, res) => {
@@ -330,4 +373,4 @@ const submitCryptoWithdrawal = async (req, res) => {
     }
 };
 
-module.exports = {getDashboardBalances, createDeposit, initiateWithdrawal, submitPaycrestWithdrawal,submitCryptoWithdrawal,};
+module.exports = {getDashboardBalances, getDepositAddress, initiateWithdrawal, submitPaycrestWithdrawal,submitCryptoWithdrawal,};

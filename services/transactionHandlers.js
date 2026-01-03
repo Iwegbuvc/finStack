@@ -24,10 +24,10 @@ async function handleDepositConfirmed(webhookPayload = {}) {
   // -------------------------------
   // 1. Validate payload
   // -------------------------------
-  if (!amountPaid || !metadata?.user_id || !reference) {
-    console.warn("⚠️ Invalid Blockradar deposit payload", data);
-    return null;
-  }
+ if (!amountPaid || !reference) {
+  console.warn("⚠️ Invalid Blockradar deposit payload", data);
+  return null;
+}
 
   const userId = metadata.user_id;
 
@@ -38,11 +38,11 @@ async function handleDepositConfirmed(webhookPayload = {}) {
   // -------------------------------
   // 2. Idempotency check (OUTSIDE transaction)
   // -------------------------------
+
   const existingTx = await Transaction.findOne({
-    reference,
-    type: "DEPOSIT",
-    status: "COMPLETED",
-  });
+  reference,
+  source: "BLOCKRADAR",
+});
 
   if (existingTx) {
     console.info(`🔁 Duplicate deposit ignored: ${reference}`);
@@ -59,11 +59,34 @@ async function handleDepositConfirmed(webhookPayload = {}) {
     // -------------------------------
     // 4. Resolve wallet
     // -------------------------------
-    const wallet = await Wallet.findOne({ user_id: userId }).session(session);
+   
 
-    if (!wallet) {
-      throw new Error(`Wallet not found for user ${userId}`);
-    }
+    let wallet = null;
+
+// Preferred: Blockradar wallet ID
+if (data.externalWalletId) {
+  wallet = await Wallet.findOne({
+    externalWalletId: data.externalWalletId,
+    currency: normalizedCurrency,
+    status: "ACTIVE",
+  }).session(session);
+}
+
+// Fallback: recipient address
+if (!wallet && recipientAddress) {
+  wallet = await Wallet.findOne({
+    walletAddress: recipientAddress,
+    currency: normalizedCurrency,
+    status: "ACTIVE",
+  }).session(session);
+}
+
+if (!wallet) {
+  throw new Error(
+    `Wallet not found for Blockradar deposit | extWalletId=${data.externalWalletId}`
+  );
+}
+
 
     // -------------------------------
     // 5. Amount & fee calculation
