@@ -441,7 +441,7 @@ await createIdempotentTransaction({
   type: "P2P_ESCROW",
   amount: -trade.amountCrypto, // 🔴 DEBIT
   currency: trade.currencyTarget,
-  status: "COMPLETED",
+  status: "PENDING",
   reference: trade.reference,
   metadata: { p2pTradeId: trade._id }
 }, session);
@@ -568,139 +568,6 @@ async initiateSettlementOTP(reference, requesterId) {
 
     return { message: "Verification code sent to your email. Enter OTP to release crypto." };
 },
-// async confirmAndReleaseCrypto(reference, requesterId, otpCode, ip = null) {
-//     if (!reference || !otpCode) throw new TradeError("Reference and OTP code required");
-
-//     // 1. Initial Data Fetching
-//     const trade = await P2PTrade.findOne({ reference });
-//     if (!trade) throw new TradeError("Trade not found", 404);
-
-//     // 2. Authorization & Scope Setup
-//     const sellerId = trade.side === 'BUY' ? trade.merchantId : trade.userId;
-//     const isAdminAction = otpCode === "ADMIN_OVERRIDE";
-//     let txId = null; // 🚀 DEFINE OUTSIDE SO CATCH BLOCK CAN SEE IT
-
-//     if (!isAdminAction && requesterId.toString() !== sellerId.toString()) {
-//         throw new TradeError("Unauthorized", 403);
-//     }
-
-//     const validStatuses = ["PAYMENT_CONFIRMED_BY_BUYER", "MERCHANT_PAID", "DISPUTE_PENDING"];
-//     if (!validStatuses.includes(trade.status)) {
-//         throw new TradeError(`Cannot settle. Trade status is ${trade.status}`, 409);
-//     }
-
-//     // 3. OTP Verification
-//     if (!isAdminAction) {
-//         const isVerified = await verifyOtp(sellerId, otpCode, 'P2P_SETTLEMENT');
-//         if (!isVerified) throw new TradeError("Invalid or expired OTP.", 401);
-//     }
-
-//     // 4. Resolve Recipient Info
-//     const recipientId = trade.side === 'BUY' ? trade.userId : trade.merchantId;
-//     const recipientAddress = await resolveUserCryptoAddress(recipientId, trade.currencyTarget);
-
-//     // 5. EXTERNAL API CALL
-//     try {
-//         const transferResult = await blockrader.transferFunds(
-//             blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-//             null,
-//             trade.netCryptoAmount,
-//             trade.currencyTarget,
-//             recipientAddress,
-//             `${trade.reference}-SETTLEMENT`
-//         );
-//         txId = transferResult?.data?.id || transferResult?.txId; // 🚀 ASSIGN TO OUTER VARIABLE
-//     } catch (apiErr) {
-//         logger.error("Provider API Fatal Error", apiErr);
-//         throw new TradeError("External provider communication failed.");
-//     }
-
-//     if (!txId) throw new TradeError("Settlement transfer failed at provider.");
-
-//     // 6. ATOMIC DB UPDATES
-//     const session = await mongoose.startSession();
-//     try {
-//         await session.withTransaction(async () => {
-//             const settlementMessage = `Settlement initiated (tx:${txId}).`;
-
-//             // Update Trade
-//             await updateTradeStatusAndLogSafe(
-//                 trade._id,
-//                 "COMPLETED",
-//                 {
-//                     message: isAdminAction ? `ADMIN: ${settlementMessage}` : settlementMessage,
-//                     actor: requesterId,
-//                     role: isAdminAction ? "admin" : (trade.side === 'BUY' ? "merchant" : "user"),
-//                     ip,
-//                 },
-//                 trade.status,
-//                 session
-//             );
-
-//             // Credit Recipient
-//             await createIdempotentTransaction({
-//                 idempotencyKey: `P2P:${trade._id}:RELEASE`,
-//                 walletId: await resolveWalletObjectId(recipientId, trade.currencyTarget),
-//                 userId: recipientId,
-//                 type: "P2P_RELEASE",
-//                 amount: trade.netCryptoAmount,
-//                 currency: trade.currencyTarget,
-//                 status: "COMPLETED",
-//                 reference: trade.reference
-//             }, session);
-
-//             // Handle Fees Ledger
-//             if (trade.platformFeeCrypto > 0) {
-//                 await createIdempotentTransaction({
-//                     idempotencyKey: `P2P:${trade._id}:FEE`,
-//                     walletId: await resolveWalletObjectId(trade.merchantId, trade.currencyTarget),
-//                     userId: trade.merchantId,
-//                     type: "P2P_FEE",
-//                     amount: -trade.platformFeeCrypto,
-//                     currency: trade.currencyTarget,
-//                     status: "COMPLETED",
-//                     reference: trade.reference
-//                 }, session);
-
-//                 await FeeLog.create([{
-//                     userId: trade.merchantId,
-//                     transactionId: trade._id,
-//                     type: "P2P",
-//                     currency: trade.currencyTarget,
-//                     feeAmount: trade.platformFeeCrypto,
-//                     reference: trade.reference
-//                 }], { session });
-//             }
-//         });
-
-//         await redisClient.del(`balances:${trade.userId}`);
-//         await redisClient.del(`balances:${trade.merchantId}`);
-//         return await P2PTrade.findById(trade._id).lean();
-
-//     } catch (dbError) {
-//         // 🚀 NOW THIS WILL NOT CRASH because txId is available
-//         // 🔍 FULL TRANSACTION FAILURE LOGGING
-//     console.error("❌ TRANSACTION FAILED FULL ERROR:", dbError);
-//     console.error("❌ STACK TRACE:", dbError.stack);
-
-//     logger.error("CRITICAL SYNC ERROR: Money sent but DB failed to update!", {
-//         txId,
-//         reference: trade.reference,
-//         error: dbError.message,
-//         name: dbError.name,
-//         code: dbError.code
-//     });
-
-//     throw new TradeError(
-//         "Settlement succeeded but local records failed to update. Please contact support.",
-//         500
-//     );
-// } finally {
-//     session.endSession();
-// }
-// },
-
-
 async confirmAndReleaseCrypto(reference, requesterId, otpCode, ip = null) {
   if (!reference || !otpCode) throw new TradeError("Reference and OTP code required", 400);
 
