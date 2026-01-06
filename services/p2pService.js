@@ -568,189 +568,344 @@ async initiateSettlementOTP(reference, requesterId) {
 
     return { message: "Verification code sent to your email. Enter OTP to release crypto." };
 },
-async confirmAndReleaseCrypto(reference, requesterId, otpCode, ip = null) {
-  if (!reference || !otpCode) throw new TradeError("Reference and OTP code required", 400);
+// async confirmAndReleaseCrypto(params = {}) {
+//   // ===============================
+//   // 1️⃣ Extract & validate inputs
+//   // ===============================
+//   const tradeReference = params.tradeId || params.reference;
+//   const confirmerUserId = params.confirmerUserId || params.requesterId;
 
-  // 1️⃣ Load trade
-  const trade = await P2PTrade.findOne({ reference });
-  if (!trade) throw new TradeError("Trade not found", 404);
+//   if (!tradeReference || typeof tradeReference !== "string") {
+//     throw new TradeError("Trade reference is required", 400);
+//   }
 
-  const sellerId = trade.side === "BUY" ? trade.merchantId : trade.userId;
-  const recipientId = trade.side === "BUY" ? trade.userId : trade.merchantId;
-  const merchantId = trade.merchantId;
-  const isAdminAction = otpCode === "ADMIN_OVERRIDE";
+//   const normalizedReference = tradeReference.trim();
+//   const session = await mongoose.startSession();
 
-  // 2️⃣ Authorization
-  if (!isAdminAction && requesterId.toString() !== sellerId.toString()) {
-    throw new TradeError("Unauthorized", 403);
+//   try {
+//     const settledTrade = await session.withTransaction(async () => {
+//       // ===============================
+//       // 2️⃣ Lock trade (atomic)
+//       // ===============================
+//       const trade = await P2PTrade.findOneAndUpdate(
+//         {
+//           reference: normalizedReference,
+//           status: ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
+//         },
+//         { $set: { status: ALLOWED_STATES.RELEASING } },
+//         { session, new: true }
+//       );
+
+//       if (!trade) {
+//         throw new TradeError(
+//           "Trade not found or already settled",
+//           409
+//         );
+//       }
+
+//       // ===============================
+//       // 3️⃣ Authorization
+//       // ===============================
+//       const sellerId =
+//         trade.side === "BUY" ? trade.merchantId : trade.userId;
+
+//       if (
+//         confirmerUserId &&
+//         confirmerUserId.toString() !== sellerId.toString()
+//       ) {
+//         throw new TradeError("Unauthorized to release crypto", 403);
+//       }
+
+//       // ===============================
+//       // 4️⃣ Load required wallets
+//       // ===============================
+//       const sellerSpotWallet = await Wallet.findOne({
+//         user_id: sellerId,
+//         currency: trade.currencyTarget,
+//         walletType: "USER",
+//         provider: "BLOCKRADAR",
+//         status: "ACTIVE",
+//       }).session(session);
+
+//       if (!sellerSpotWallet) {
+//         throw new TradeError("Seller spot wallet not found", 404);
+//       }
+
+//       const platformWallet = await Wallet.findOne({
+//         walletType: "MASTER",
+//         currency: trade.currencyTarget,
+//         provider: "BLOCKRADAR",
+//         status: "ACTIVE",
+//       }).session(session);
+
+//       // ===============================
+//       // 5️⃣ Amounts
+//       // ===============================
+//       const netAmount = trade.netCryptoAmount;
+//       const platformFee = trade.platformFeeCrypto || 0;
+
+//       // ===============================
+//       // 6️⃣ Ledger: Release crypto
+//       // ===============================
+//       await Transaction.create(
+//         [
+//           {
+//             walletId: sellerSpotWallet._id,
+//             userId: sellerId,
+//             type: "P2P_RELEASE",
+//             amount: netAmount,
+//             currency: trade.currencyTarget,
+//             status: "COMPLETED",
+//             reference: trade.reference,
+//             idempotencyKey: `P2P:${trade._id}:RELEASE`,
+//             metadata: {
+//               tradeId: trade._id,
+//               side: trade.side,
+//             },
+//           },
+//         ],
+//         { session }
+//       );
+
+//       // ===============================
+//       // 7️⃣ Ledger: Platform fee
+//       // ===============================
+//       if (platformFee > 0 && platformWallet) {
+//         // Debit seller
+//         await Transaction.create(
+//           [
+//             {
+//               walletId: sellerSpotWallet._id,
+//               userId: sellerId,
+//               type: "P2P_FEE",
+//               amount: -platformFee,
+//               currency: trade.currencyTarget,
+//               status: "COMPLETED",
+//               reference: trade.reference,
+//               idempotencyKey: `P2P:${trade._id}:FEE`,
+//               metadata: { tradeId: trade._id },
+//             },
+//           ],
+//           { session }
+//         );
+
+//         // Credit platform
+//         await Transaction.create(
+//           [
+//             {
+//               walletId: platformWallet._id,
+//               userId: platformWallet.user_id,
+//               type: "P2P_FEE",
+//               amount: platformFee,
+//               currency: trade.currencyTarget,
+//               status: "COMPLETED",
+//               reference: trade.reference,
+//               idempotencyKey: `P2P:${trade._id}:FEE_PLATFORM`,
+//               metadata: { tradeId: trade._id },
+//             },
+//           ],
+//           { session }
+//         );
+//       }
+
+//       // ===============================
+//       // 8️⃣ Finalize trade
+//       // ===============================
+//       trade.status = ALLOWED_STATES.COMPLETED;
+//       trade.settledAt = new Date();
+//       await trade.save({ session });
+
+//       return trade;
+//     });
+
+//     // ===============================
+//     // 9️⃣ Cache cleanup
+//     // ===============================
+//     await redisClient.del(`balances:${settledTrade.userId}`);
+//     await redisClient.del(`balances:${settledTrade.merchantId}`);
+
+//     return settledTrade.toObject();
+//   } catch (error) {
+//     // Idempotent retry protection
+//     if (error.code === 11000) {
+//       return await P2PTrade.findOne({
+//         reference: normalizedReference,
+//       }).lean();
+//     }
+//     throw error;
+//   } finally {
+//     session.endSession();
+//   }
+// }
+// ,
+async confirmAndReleaseCrypto(params = {}) {
+  const tradeReference = params.tradeId || params.reference;
+  const confirmerUserId = params.confirmerUserId || params.requesterId;
+
+  if (!tradeReference || typeof tradeReference !== "string") {
+    throw new TradeError("Trade reference is required", 400);
   }
 
-  // 3️⃣ Trade status validation
-  const validStatuses = ["PAYMENT_CONFIRMED_BY_BUYER", "MERCHANT_PAID", "DISPUTE_PENDING"];
-  if (!validStatuses.includes(trade.status)) {
-    throw new TradeError(`Cannot settle trade in status ${trade.status}`, 409);
-  }
-
-  // 4️⃣ OTP verification (if not admin)
-  if (!isAdminAction) {
-    const otpValid = await verifyOtp(sellerId, otpCode, "P2P_SETTLEMENT");
-    if (!otpValid) throw new TradeError("Invalid or expired OTP", 401);
-  }
-
-  // 5️⃣ Resolve recipient crypto address
-  const recipientAddress = await resolveUserCryptoAddress(recipientId, trade.currencyTarget);
-
-  // 6️⃣ Transfer funds via Blockrader
-  let txId;
-  try {
-    const transfer = await blockrader.transferFunds(
-      blockrader.BLOCKRADER_MASTER_WALLET_UUID,
-      null,
-      trade.netCryptoAmount,
-      trade.currencyTarget,
-      recipientAddress,
-      `${trade.reference}-SETTLEMENT`
-    );
-    txId = transfer?.data?.id || transfer?.txId;
-  } catch (err) {
-    logger.error("BLOCKRADAR TRANSFER FAILED", err);
-    throw new TradeError("Settlement provider failed", 502);
-  }
-
-  if (!txId) throw new TradeError("Settlement transfer failed", 502);
-
-  // 7️⃣ MongoDB transaction
+  const normalizedReference = tradeReference.trim();
   const session = await mongoose.startSession();
 
-  const runWithRetry = async (fn, retries = 3) => {
-    for (let i = 0; i < retries; i++) {
-      try {
-        return await fn();
-      } catch (err) {
-        if (err?.errorLabels?.includes("TransientTransactionError") && i < retries - 1) {
-          continue;
-        }
-        throw err;
-      }
-    }
-  };
-
   try {
-    await runWithRetry(() =>
-      session.withTransaction(async () => {
-        // Lock trade row
-        const lockedTrade = await P2PTrade.findOne({ _id: trade._id, status: trade.status }, null, { session });
-        if (!lockedTrade) throw new Error("Trade state changed during settlement");
+    await session.withTransaction(async () => {
+      // ===============================
+      // 1️⃣ Load trade (idempotent)
+      // ===============================
+      const trade = await P2PTrade.findOne({
+        reference: normalizedReference,
+        status: {
+          $in: [
+            ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
+            ALLOWED_STATES.RELEASING,
+            ALLOWED_STATES.COMPLETED, // allow idempotent retries
+          ],
+        },
+      }).session(session);
 
-        // ✅ Update trade status
-        await P2PTrade.updateOne(
-          { _id: trade._id },
-          {
-            status: "COMPLETED",
-            settlementTxId: txId,
-            settledAt: new Date(),
-          },
+      if (!trade) {
+        return; // trade doesn't exist
+      }
+
+      // If already completed, return early (idempotent)
+      if (trade.status === ALLOWED_STATES.COMPLETED) {
+        return;
+      }
+
+      // ===============================
+      // 2️⃣ Authorization
+      // ===============================
+      const sellerId = trade.side === "BUY" ? trade.merchantId : trade.userId;
+
+      if (confirmerUserId && confirmerUserId.toString() !== sellerId.toString()) {
+        throw new TradeError("Unauthorized to release crypto", 403);
+      }
+
+      // ===============================
+      // 3️⃣ Move to RELEASING
+      // ===============================
+      if (trade.status !== ALLOWED_STATES.RELEASING) {
+        trade.status = ALLOWED_STATES.RELEASING;
+        await trade.save({ session });
+      }
+
+      // ===============================
+      // 4️⃣ Load wallets
+      // ===============================
+      const sellerWallet = await Wallet.findOne({
+        user_id: sellerId,
+        currency: trade.currencyTarget,
+        walletType: "USER",
+        provider: "BLOCKRADAR",
+        status: "ACTIVE",
+      }).session(session);
+
+      if (!sellerWallet) {
+        throw new TradeError("Seller wallet not found", 404);
+      }
+
+      const platformWallet = await Wallet.findOne({
+        walletType: "MASTER",
+        currency: trade.currencyTarget,
+        provider: "BLOCKRADAR",
+        status: "ACTIVE",
+      }).session(session);
+
+      // ===============================
+      // 5️⃣ Ledger: Release crypto (idempotent)
+      // ===============================
+      const releaseIdempotencyKey = `P2P:${trade._id}:RELEASE`;
+      const releaseExists = await Transaction.findOne({
+        idempotencyKey: releaseIdempotencyKey,
+      }).session(session);
+
+      if (!releaseExists) {
+        await Transaction.create(
+          [
+            {
+              walletId: sellerWallet._id,
+              userId: sellerId,
+              type: "P2P_RELEASE",
+              amount: trade.netCryptoAmount,
+              currency: trade.currencyTarget,
+              status: "COMPLETED",
+              reference: trade.reference,
+              idempotencyKey: releaseIdempotencyKey,
+            },
+          ],
           { session }
         );
+      }
 
-        // 2️⃣ Ensure recipient wallet exists (upsert)
-        const recipientWallet = await Wallet.findOneAndUpdate(
-          { user_id: recipientId, currency: trade.currencyTarget },
-          { $setOnInsert: { balance: 0, walletType: "USER" } },
-          { session, upsert: true, new: true, setDefaultsOnInsert: true }
-        );
+      // ===============================
+      // 6️⃣ Ledger: Platform fee (idempotent)
+      // ===============================
+      if (trade.platformFeeCrypto > 0 && platformWallet) {
+        const feeSellerKey = `P2P:${trade._id}:FEE_SELLER`;
+        const feePlatformKey = `P2P:${trade._id}:FEE_PLATFORM`;
 
-        // 3️⃣ Idempotent recipient transaction
-        const releaseTransactionRef = `P2P:${trade._id}:RELEASE`;
-        let existingReleaseTx = await Transaction.findOne({ reference: releaseTransactionRef }).session(session);
-        if (!existingReleaseTx) {
+        const feeExists = await Transaction.findOne({
+          $or: [
+            { idempotencyKey: feeSellerKey },
+            { idempotencyKey: feePlatformKey },
+          ],
+        }).session(session);
+
+        if (!feeExists) {
           await Transaction.create(
             [
               {
-                userId: recipientId,
-                walletId: recipientWallet._id,
-                type: "P2P_RELEASE",
-                amount: trade.netCryptoAmount,
+                walletId: sellerWallet._id,
+                userId: sellerId,
+                type: "P2P_FEE",
+                amount: -trade.platformFeeCrypto,
                 currency: trade.currencyTarget,
                 status: "COMPLETED",
-                reference: releaseTransactionRef,
-                idempotencyKey: releaseTransactionRef,
+                reference: trade.reference,
+                idempotencyKey: feeSellerKey,
+              },
+              {
+                walletId: platformWallet._id,
+                userId: platformWallet.user_id,
+                type: "P2P_FEE",
+                amount: trade.platformFeeCrypto,
+                currency: trade.currencyTarget,
+                status: "COMPLETED",
+                reference: trade.reference,
+                idempotencyKey: feePlatformKey,
               },
             ],
             { session }
           );
         }
+      }
 
-        // 4️⃣ Platform fee (merchant)
-        if (trade.platformFeeCrypto > 0) {
-          const merchantWallet = await Wallet.findOneAndUpdate(
-            { user_id: merchantId, currency: trade.currencyTarget },
-            { $setOnInsert: { balance: 0, walletType: "USER" } },
-            { session, upsert: true, new: true, setDefaultsOnInsert: true }
-          );
-
-          const feeTransactionRef = `P2P:${trade._id}:FEE`;
-          let existingFeeTx = await Transaction.findOne({ reference: feeTransactionRef }).session(session);
-
-          if (!existingFeeTx) {
-            await Transaction.create(
-              [
-                {
-                  userId: merchantId,
-                  walletId: merchantWallet._id,
-                  type: "P2P_FEE",
-                  amount: -trade.platformFeeCrypto,
-                  currency: trade.currencyTarget,
-                  status: "COMPLETED",
-                  reference: feeTransactionRef,
-                  idempotencyKey: feeTransactionRef,
-                },
-              ],
-              { session }
-            );
-
-            await FeeLog.create(
-              [
-                {
-                  userId: merchantId,
-                  transactionId: trade._id,
-                  type: "P2P",
-                  currency: trade.currencyTarget,
-                  feeAmount: trade.platformFeeCrypto,
-                  reference: trade.reference,
-                },
-              ],
-              { session }
-            );
-          }
-        }
-      })
-    );
-
-    // 8️⃣ Post-commit cleanup
-    await redisClient.del(`balances:${trade.userId}`);
-    await redisClient.del(`balances:${trade.merchantId}`);
-
-    // 9️⃣ Return updated trade
-    return await P2PTrade.findById(trade._id).lean();
-  } catch (dbError) {
-    console.error("❌ DB TRANSACTION FAILED:", dbError);
-    console.error("❌ STACK TRACE:", dbError.stack);
-
-    logger.error("CRITICAL SETTLEMENT DESYNC", {
-      txId,
-      reference: trade.reference,
-      error: dbError.message,
+      // ===============================
+      // 7️⃣ Finalize trade
+      // ===============================
+      trade.status = ALLOWED_STATES.COMPLETED;
+      trade.settledAt = new Date();
+      await trade.save({ session });
     });
 
-    throw new TradeError(
-      "Settlement succeeded but local records failed to update. Please contact support.",
-      500
-    );
+    // ===============================
+    // 8️⃣ Reload finalized trade
+    // ===============================
+    const finalTrade = await P2PTrade.findOne({ reference: normalizedReference }).lean();
+
+    // Cache cleanup (non-blocking)
+    redisClient.del(`balances:${finalTrade.userId}`).catch(() => {});
+    redisClient.del(`balances:${finalTrade.merchantId}`).catch(() => {});
+
+    return finalTrade;
   } finally {
     session.endSession();
   }
-},
+}
+
+,
 
 async cancelTrade(reference, userId, ip = null) {
     if (!reference) throw new TradeError("Reference required");
