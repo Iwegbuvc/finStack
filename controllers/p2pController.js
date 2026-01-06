@@ -190,32 +190,37 @@ const initiateSettlementOTP = async (req, res) => {
 };
 
 // 3b. Merchant confirms payment with OTP (POST /trade/:reference/confirm-merchant-payment)
-// const merchantConfirmPayment = async (req, res) => {
-//   try {
-//     const merchantId = req.user.id;
-//     const { reference } = req.params;
-//     // 💡 NEW: OTP Code is now required in the request body
-//     const { otpCode } = req.body; 
-//     const ip = req.ip;
-//     
-//     if (!reference) {
-//       return handleServiceError(res, new Error("Trade reference is required in the URL path."));
-//     }
-//     if (!otpCode) {
-//         return res.status(400).json({ success: false, message: "OTP code is required to complete settlement." });
-//     }
+//
+// 3b. Seller confirms OTP & releases crypto
+// const confirmAndReleaseCrypto = async (req, res) => {
+//   try {
+//     const requesterId = req.user.id;
+//     const { reference } = req.params;
+//     const { otpCode } = req.body;
+//     const ip = req.ip;
 
-//     // Call the service with the new otpCode argument
-//     // NOTE: The service layer still handles destination lookup from the Wallet model
-//     const trade = await p2pService.confirmMerchantPayment(reference, merchantId, otpCode, ip); 
+//     if (!reference || !otpCode) {
+//       return res.status(400).json({
+//         success: false,
+//         message: "Reference and OTP code are required."
+//       });
+//     }
 
-//     res.status(200).json({
-//       message: "Trade successfully settled. Escrow released to respective parties.",
-//       data: trade,
-//     });
-//   } catch (error) {
-//     handleServiceError(res, error);
-//   }
+//     const trade = await p2pService.confirmAndReleaseCrypto(
+//       reference,
+//       requesterId,
+//       otpCode,
+//       ip
+//     );
+
+//     return res.status(200).json({
+//       success: true,
+//       message: "Crypto released successfully.",
+//       data: trade
+//     });
+//   } catch (error) {
+//     handleServiceError(res, error);
+//   }
 // };
 // 3b. Seller confirms OTP & releases crypto
 const confirmAndReleaseCrypto = async (req, res) => {
@@ -232,12 +237,13 @@ const confirmAndReleaseCrypto = async (req, res) => {
       });
     }
 
-    const trade = await p2pService.confirmAndReleaseCrypto(
-      reference,
-      requesterId,
-      otpCode,
-      ip
-    );
+    // ✅ FIX: Pass as a single OBJECT {} instead of separate arguments
+    const trade = await p2pService.confirmAndReleaseCrypto({
+      reference: reference,
+      confirmerUserId: requesterId,
+      otpCode: otpCode,
+      ip: ip
+    });
 
     return res.status(200).json({
       success: true,
@@ -248,7 +254,6 @@ const confirmAndReleaseCrypto = async (req, res) => {
     handleServiceError(res, error);
   }
 };
-
 // 4. Cancel trade (DELETE /trade/:reference/cancel)
 const cancelTrade = async (req, res) => {
   try {
