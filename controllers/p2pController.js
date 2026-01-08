@@ -146,28 +146,6 @@ const buyerConfirmPayment = async (req, res) => {
     handleServiceError(res, error);
   }
 }
-// // 3a. Initiate Merchant Confirm Payment (POST /trade/:reference/initiate-merchant-payment-confirmation)
-// const initiateMerchantConfirmPayment = async (req, res) => {
-//   try {
-//     const merchantId = req.user.id;
-//     const { reference } = req.params;
-//     const ip = req.ip;
-//     
-//     if (!reference) {
-//       return handleServiceError(res, new Error("Trade reference is required in the URL path."));
-//     }
-
-//     // Call the new service function to send the OTP
-//     const result = await p2pService.initiateMerchantPaymentConfirmation(reference, merchantId, ip);
-
-//     res.status(200).json({
-//       message: result.message,
-//       success: true,
-//     });
-//   } catch (error) {
-//     handleServiceError(res, error);
-//   }
-// };
 // 3a. Seller initiates crypto release (OTP)
 const initiateSettlementOTP = async (req, res) => {
   try {

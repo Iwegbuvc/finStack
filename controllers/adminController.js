@@ -9,7 +9,7 @@ const Announcement = require('../models/announcementModel');
 const announcementQueue = require('../utilities/announcementQueue');
 const sanitizeHtml = require('../utilities/sanitizingHtml');
 const { getOrCreateStablecoinAddress, createWalletRecord, createVirtualAccountIfMissing,getTotalTransactionVolume, createVirtualAccountForChildAddress } = require("../services/providers/blockrader");
-const { updatePlatformFee, setPlatformFees } = require("../services/adminFeeService");
+const { updatePlatformFee } = require("../services/adminFeeService");
 
 
 /* =========== ADMIN: Create Announcement and Send Mail =========== */
