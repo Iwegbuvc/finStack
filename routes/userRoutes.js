@@ -4,6 +4,7 @@ const {
   addUserBank,
   getMe,
   updateMe,
+  getMyBankAccounts,
 } = require("../controllers/userController");
 const { verifyToken } = require("../middlewares/validateToken");
 const { walletLimiter } = require("../middlewares/rateLimiter");
@@ -14,5 +15,6 @@ router.get("/me", verifyToken, walletLimiter, getMe);
 router.patch("/update-me", verifyToken, walletLimiter, updateMe);
 // Route to add a bank account
 router.post("/bank-account", verifyToken, walletLimiter, addUserBank);
+router.get("/my-bank-accounts", verifyToken, walletLimiter, getMyBankAccounts);
 
 module.exports = router;

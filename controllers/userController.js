@@ -4,8 +4,10 @@ const User = require("../models/userModel");
 const getAllUsers = async (req, res) => {
   try {
     // 1. Admin Authorization Guard
-    if (req.user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: "Admin access required" });
+    if (req.user.role !== "admin") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Admin access required" });
     }
 
     // 2. Pagination Logic
@@ -17,7 +19,7 @@ const getAllUsers = async (req, res) => {
     const { role, isVerified } = req.query;
     const filter = {};
     if (role) filter.role = role;
-    if (isVerified) filter.isVerified = isVerified === 'true';
+    if (isVerified) filter.isVerified = isVerified === "true";
 
     // 4. Parallel Execution for Speed
     const [users, total] = await Promise.all([
@@ -27,7 +29,7 @@ const getAllUsers = async (req, res) => {
         .skip(skip)
         .limit(limit)
         .lean(),
-      User.countDocuments(filter)
+      User.countDocuments(filter),
     ]);
 
     res.status(200).json({
@@ -37,10 +39,9 @@ const getAllUsers = async (req, res) => {
         totalUsers: total,
         currentPage: page,
         totalPages: Math.ceil(total / limit),
-        pageSize: limit
-      }
+        pageSize: limit,
+      },
     });
-
   } catch (error) {
     console.error("Error fetching users:", error);
     res.status(500).json({ success: false, message: "Internal server error" });
@@ -51,15 +52,19 @@ const getAllUsers = async (req, res) => {
 const getMe = async (req, res) => {
   try {
     // req.user.id comes from your verifyToken middleware
-    const user = await User.findById(req.user.id).select("-password -refreshToken");
+    const user = await User.findById(req.user.id).select(
+      "-password -refreshToken"
+    );
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     res.status(200).json({
       success: true,
-      data: user
+      data: user,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -69,10 +74,10 @@ const getMe = async (req, res) => {
 const updateMe = async (req, res) => {
   try {
     const userId = req.user.id;
-    
+
     // Define which fields are allowed to be updated
     const { firstName, lastName, phoneNumber } = req.body;
-    
+
     // Construct update object
     const updateData = {};
     if (firstName) updateData.firstName = firstName;
@@ -86,15 +91,16 @@ const updateMe = async (req, res) => {
     ).select("-password -refreshToken");
 
     if (!updatedUser) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     res.status(200).json({
       success: true,
       message: "Profile updated successfully",
-      data: updatedUser
+      data: updatedUser,
     });
-
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -106,10 +112,7 @@ const addUserBank = async (req, res) => {
     const userId = req.user.id;
 
     // 1. Set all existing accounts for this user to isPrimary: false
-    await UserBankAccount.updateMany(
-      { userId },
-      { isPrimary: false }
-    );
+    await UserBankAccount.updateMany({ userId }, { isPrimary: false });
 
     // 2. Create the new account as the Primary one
     const newBank = await UserBankAccount.create({
@@ -118,17 +121,47 @@ const addUserBank = async (req, res) => {
       accountNumber,
       accountName,
       bankCode,
-      isPrimary: true
+      isPrimary: true,
     });
 
     res.status(201).json({
       success: true,
       message: "Bank account added and set as primary.",
-      data: newBank
+      data: newBank,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
-module.exports = { addUserBank, getAllUsers, getMe, updateMe };
+const getMyBankAccounts = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const bankAccounts = await UserBankAccount.find({
+      userId,
+      deletedAt: null,
+    })
+      .sort({ isPrimary: -1, createdAt: -1 })
+      .select("-__v")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: bankAccounts,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  addUserBank,
+  getAllUsers,
+  getMe,
+  updateMe,
+  getMyBankAccounts,
+};
