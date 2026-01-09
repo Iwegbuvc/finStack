@@ -1,39 +1,46 @@
-const MerchantAd = require('../models/merchantModel');
-const logger = require('../utilities/logger');
+const MerchantAd = require("../models/merchantModel");
+const logger = require("../utilities/logger");
 const FeeConfig = require("../models/feeConfigModel");
 const Wallet = require("../models/walletModel");
 const { getWalletBalance } = require("../services/providers/blockrader");
-const { getFlatFee } = require('../services/adminFeeService');
+const { getFlatFee } = require("../services/adminFeeService");
 const p2pService = require("../services/p2pService"); // Ensure the path to your service file is correct
 
 // Create a new Merchant Ad
 const createMerchantAd = async (req, res) => {
   try {
     const userId = req.user.id;
-const {
-  type,
-  minLimit,
-  maxLimit,
-  availableAmount,
-  paymentMethods,
-  timeLimit,
-  instructions,
-  autoReply
-} = req.body;
+    const {
+      type,
+      minLimit,
+      maxLimit,
+      availableAmount,
+      paymentMethods,
+      timeLimit,
+      instructions,
+      autoReply,
+    } = req.body;
 
-const asset = req.body.asset?.trim().toUpperCase();
-const fiat  = req.body.fiat?.trim().toUpperCase();
+    const asset = req.body.asset?.trim().toUpperCase();
+    const fiat = req.body.fiat?.trim().toUpperCase();
 
-
-    const price = Number(req.body.price); // FIAT PRICE 
+    const price = Number(req.body.price); // FIAT PRICE
 
     // Required fields
     if (
-      !type || !asset || !fiat || price === undefined ||
-      !minLimit || !maxLimit || !paymentMethods?.length ||
-      !timeLimit || !availableAmount
+      !type ||
+      !asset ||
+      !fiat ||
+      price === undefined ||
+      !minLimit ||
+      !maxLimit ||
+      !paymentMethods?.length ||
+      !timeLimit ||
+      !availableAmount
     ) {
-      return res.status(400).json({ message: "All required fields must be provided." });
+      return res
+        .status(400)
+        .json({ message: "All required fields must be provided." });
     }
 
     if (isNaN(price) || price <= 0) {
@@ -45,41 +52,49 @@ const fiat  = req.body.fiat?.trim().toUpperCase();
     const validCryptoAssets = ["USDC", "CNGN"];
     const validFiatCurrencies = ["NGN", "GHS", "XAF", "XOF", "RMB", "USD"];
 
-    if (!validTypes.includes(type)) return res.status(400).json({ message: "Invalid ad type." });
+    if (!validTypes.includes(type))
+      return res.status(400).json({ message: "Invalid ad type." });
     // if (!validCryptoAssets.includes(asset)) return res.status(400).json({ message: "Invalid crypto asset." });
     if (!validCryptoAssets.includes(asset)) {
-    return res.status(400).json({ message: "Invalid crypto asset." });
-}
-    if (!validFiatCurrencies.includes(fiat)) return res.status(400).json({ message: "Invalid fiat currency." });
+      return res.status(400).json({ message: "Invalid crypto asset." });
+    }
+    if (!validFiatCurrencies.includes(fiat))
+      return res.status(400).json({ message: "Invalid fiat currency." });
 
     if (!req.user.kycVerified) {
-      return res.status(403).json({ message: "Merchant must complete KYC verification." });
+      return res
+        .status(403)
+        .json({ message: "Merchant must complete KYC verification." });
     }
 
     // 🔑 CRYPTO-ONLY PLATFORM FEE
-// const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
+    // const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
 
-// if (!feeConfig) {
-//   return res.status(400).json({
-//     message: `Platform fee not configured for ${asset}`
-//   });
-// }
+    // if (!feeConfig) {
+    //   return res.status(400).json({
+    //     message: `Platform fee not configured for ${asset}`
+    //   });
+    // }
 
-// const feeRate = feeConfig.feeAmount || 0; 
-// const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
+    // const feeRate = feeConfig.feeAmount || 0;
+    // const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
 
+    // Use the same logic as initiateTrade
+    // const feeValue = await getFlatFee("P2P", asset, fiat);
+    // const feeRate = Number(feeValue);
 
-// Use the same logic as initiateTrade
-const feeValue = await getFlatFee("P2P", asset, fiat);
-const feeRate = Number(feeValue);
-
-const platformFeeCrypto = feeRate;
+    // const platformFeeCrypto = feeRate;
     // SELL: balance & liquidity checks
     if (type === "SELL") {
-      const merchantWallet = await Wallet.findOne({ user_id: userId, currency: asset });
+      const merchantWallet = await Wallet.findOne({
+        user_id: userId,
+        currency: asset,
+      });
 
       if (!merchantWallet || !merchantWallet.externalWalletId) {
-        return res.status(404).json({ message: `No ${asset} wallet initialized.` });
+        return res
+          .status(404)
+          .json({ message: `No ${asset} wallet initialized.` });
       }
 
       const balanceData = await getWalletBalance(
@@ -89,7 +104,7 @@ const platformFeeCrypto = feeRate;
 
       if (balanceData.available < availableAmount) {
         return res.status(400).json({
-          message: `Insufficient balance. Available: ${balanceData.available}, tried to list: ${availableAmount}.`
+          message: `Insufficient balance. Available: ${balanceData.available}, tried to list: ${availableAmount}.`,
         });
       }
 
@@ -97,7 +112,7 @@ const platformFeeCrypto = feeRate;
 
       if (maxLimit > maxFiatFromLiquidity) {
         return res.status(400).json({
-          message: `Max limit (${maxLimit}) exceeds available liquidity (${maxFiatFromLiquidity}).`
+          message: `Max limit (${maxLimit}) exceeds available liquidity (${maxFiatFromLiquidity}).`,
         });
       }
     }
@@ -108,9 +123,9 @@ const platformFeeCrypto = feeRate;
       type,
       asset,
       fiat,
-      price,             
-      rawPrice: price,     
-      platformFeeCrypto,   
+      price,
+      rawPrice: price,
+      // platformFeeCrypto,
       minLimit,
       maxLimit,
       availableAmount,
@@ -118,13 +133,13 @@ const platformFeeCrypto = feeRate;
       timeLimit,
       instructions: instructions || "",
       autoReply: autoReply || "",
-      status: "ACTIVE"
+      status: "ACTIVE",
     });
 
     res.status(201).json({
       success: true,
       message: "Ad created successfully",
-      data: ad
+      data: ad,
     });
   } catch (error) {
     logger.error("Error creating merchant ad:", error);
@@ -132,7 +147,7 @@ const platformFeeCrypto = feeRate;
   }
 };
 // Get all active ads (public endpoint)
-  const getAllAds = async (req, res) => {
+const getAllAds = async (req, res) => {
   try {
     const pageNum = Number(req.query.page) || 1;
     const limitNum = Number(req.query.limit) || 20;
@@ -156,18 +171,18 @@ const platformFeeCrypto = feeRate;
         total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum)
-      }
+        totalPages: Math.ceil(total / limitNum),
+      },
     });
   } catch (error) {
     logger.error("Error fetching ads:", error);
     res.status(500).json({
       success: false,
-      message: "Error fetching ads"
+      message: "Error fetching ads",
     });
   }
 };
-  // Get merchant’s own ads
+// Get merchant’s own ads
 const getMerchantAds = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -204,18 +219,18 @@ const getMerchantAds = async (req, res) => {
         total,
         page: pageNum,
         limit: limitNum,
-        totalPages: Math.ceil(total / limitNum)
-      }
+        totalPages: Math.ceil(total / limitNum),
+      },
     });
   } catch (error) {
     logger.error("Error fetching merchant ads:", error);
     res.status(500).json({
       success: false,
-      message: "Error fetching merchant ads"
+      message: "Error fetching merchant ads",
     });
   }
 };
-  //Update an Ad
+//Update an Ad
 const updateMerchantAd = async (req, res) => {
   try {
     const { id } = req.params;
@@ -224,19 +239,25 @@ const updateMerchantAd = async (req, res) => {
 
     const ad = await MerchantAd.findOne({ _id: id, userId });
     if (!ad) {
-      return res.status(404).json({ message: "Ad not found or unauthorized to update" });
+      return res
+        .status(404)
+        .json({ message: "Ad not found or unauthorized to update" });
     }
 
     // Validate min / max
     const newMinLimit =
-      updateFields.minLimit !== undefined ? Number(updateFields.minLimit) : ad.minLimit;
+      updateFields.minLimit !== undefined
+        ? Number(updateFields.minLimit)
+        : ad.minLimit;
 
     const newMaxLimit =
-      updateFields.maxLimit !== undefined ? Number(updateFields.maxLimit) : ad.maxLimit;
+      updateFields.maxLimit !== undefined
+        ? Number(updateFields.maxLimit)
+        : ad.maxLimit;
 
     if (newMaxLimit < newMinLimit) {
       return res.status(400).json({
-        message: "Max limit must be greater than or equal to the min limit."
+        message: "Max limit must be greater than or equal to the min limit.",
       });
     }
 
@@ -255,30 +276,28 @@ const updateMerchantAd = async (req, res) => {
       const effectivePrice = ad.price;
       const effectiveAvailable =
         updateFields.availableAmount ?? ad.availableAmount;
-      const effectiveMaxLimit =
-        updateFields.maxLimit ?? ad.maxLimit;
+      const effectiveMaxLimit = updateFields.maxLimit ?? ad.maxLimit;
 
       const maxFiatFromLiquidity = effectivePrice * effectiveAvailable;
 
       if (effectiveMaxLimit > maxFiatFromLiquidity) {
         return res.status(400).json({
-          message: `Max limit (${effectiveMaxLimit}) exceeds available liquidity (${maxFiatFromLiquidity})`
+          message: `Max limit (${effectiveMaxLimit}) exceeds available liquidity (${maxFiatFromLiquidity})`,
         });
       }
 
       // 🔑 Recalculate crypto fee if liquidity changes
-     const feeConfig = await FeeConfig.findOne({ currency: ad.asset });
+      // const feeConfig = await FeeConfig.findOne({ currency: ad.asset });
 
-if (!feeConfig) {
-  return res.status(400).json({
-    message: `Platform fee not configured for ${ad.asset}`
-  });
-}
+      // if (!feeConfig) {
+      //   return res.status(400).json({
+      //     message: `Platform fee not configured for ${ad.asset}`,
+      //   });
+      // }
 
-ad.platformFeeCrypto = Number(
-  (effectiveAvailable * feeConfig.feeAmount).toFixed(8)
-);
-
+      // ad.platformFeeCrypto = Number(
+      //   (effectiveAvailable * feeConfig.feeAmount).toFixed(8)
+      // );
     }
 
     // Allowed updates
@@ -290,7 +309,7 @@ ad.platformFeeCrypto = Number(
       "instructions",
       "autoReply",
       "status",
-      "availableAmount"
+      "availableAmount",
     ];
 
     let hasUpdates = false;
@@ -298,7 +317,9 @@ ad.platformFeeCrypto = Number(
     for (const key of allowedUpdates) {
       if (updateFields[key] !== undefined) {
         if (
-          ["minLimit", "maxLimit", "timeLimit", "availableAmount"].includes(key) &&
+          ["minLimit", "maxLimit", "timeLimit", "availableAmount"].includes(
+            key
+          ) &&
           isNaN(updateFields[key])
         ) {
           return res.status(400).json({ message: `${key} must be numeric.` });
@@ -309,7 +330,9 @@ ad.platformFeeCrypto = Number(
     }
 
     if (!hasUpdates && updateFields.price === undefined) {
-      return res.status(400).json({ message: "No valid fields provided for update." });
+      return res
+        .status(400)
+        .json({ message: "No valid fields provided for update." });
     }
 
     await ad.save();
@@ -317,15 +340,15 @@ ad.platformFeeCrypto = Number(
     res.status(200).json({
       success: true,
       message: "Ad updated successfully",
-      data: ad
+      data: ad,
     });
   } catch (error) {
     logger.error("Error updating ad:", error);
     res.status(500).json({ success: false, message: "Error updating ad" });
   }
 };
-  // Deactivate an Ad
-  const deactivateAd = async (req, res) => {
+// Deactivate an Ad
+const deactivateAd = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
@@ -339,14 +362,14 @@ ad.platformFeeCrypto = Number(
     if (!ad) {
       return res.status(404).json({
         success: false,
-        message: "Ad not found, unauthorized, or already inactive"
+        message: "Ad not found, unauthorized, or already inactive",
       });
     }
 
     res.status(200).json({
       success: true,
       message: "Ad deactivated successfully",
-      data: ad
+      data: ad,
     });
   } catch (error) {
     logger.error("Error deactivating ad:", error);
@@ -356,7 +379,7 @@ ad.platformFeeCrypto = Number(
 // Get merchant orders
 const getMerchantOrders = async (req, res) => {
   console.log("REQ.USER:", req.user);
-console.log("MERCHANT ID:", req.user?.id);
+  console.log("MERCHANT ID:", req.user?.id);
 
   try {
     const merchantId = req.user.id;
@@ -371,7 +394,7 @@ console.log("MERCHANT ID:", req.user?.id);
 
     res.status(200).json({
       success: true,
-      ...result
+      ...result,
     });
   } catch (error) {
     logger.error("Error getting merchant orders:", error);
@@ -379,11 +402,11 @@ console.log("MERCHANT ID:", req.user?.id);
   }
 };
 
-  module.exports = {
-    createMerchantAd,
-    getAllAds,
-    getMerchantAds,
-    updateMerchantAd,
-    deactivateAd,
-    getMerchantOrders
-  }
+module.exports = {
+  createMerchantAd,
+  getAllAds,
+  getMerchantAds,
+  updateMerchantAd,
+  deactivateAd,
+  getMerchantOrders,
+};
