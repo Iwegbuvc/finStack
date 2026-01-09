@@ -57,6 +57,7 @@ async function checkUser(userId) {
 function safeLog(trade, logEntry) {
   console.log(`[TRADE_LOG] Ref: ${trade.reference} - ${logEntry.message}`);
 }
+
 /** Helper to resolve the provider-specific Wallet ID for a user and currency. */
 async function resolveUserWalletId(userId, currency) {
   // 1. Keep the ObjectId explicit cast for stability
@@ -139,6 +140,13 @@ async function createIdempotentTransaction(data, session) {
 
 // --------- Service functions ----------
 module.exports = {
+  async countActiveTradesForAd(adId) {
+    return await P2PTrade.countDocuments({
+      merchantAdId: adId,
+      status: { $in: ["PENDING", "PAYMENT_CONFIRMED_BY_BUYER", "RELEASING"] },
+    });
+  },
+
   async getAllUserWalletBalances(userId) {
     const cacheKey = `balances:${userId}`;
 
@@ -631,16 +639,27 @@ module.exports = {
 
     const normalizedReference = tradeReference.trim();
 
-    //  Load trade (OUTSIDE tx)
-    const trade = await P2PTrade.findOne({
+    // Load trade (OUTSIDE tx)
+    let trade = await P2PTrade.findOne({ reference: normalizedReference });
+    if (!trade) {
+      throw new TradeError("Trade not found", 404);
+    }
+
+    // Determine releasable statuses dynamically
+    let releasableStatuses = [
+      ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
+      ALLOWED_STATES.RELEASING,
+      ALLOWED_STATES.COMPLETED,
+    ];
+
+    if (trade.side === "SELL") {
+      releasableStatuses.push(ALLOWED_STATES.MERCHANT_PAID); // SELL → user can release after merchant pays
+    }
+
+    // Re-query with status filter
+    trade = await P2PTrade.findOne({
       reference: normalizedReference,
-      status: {
-        $in: [
-          ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
-          ALLOWED_STATES.RELEASING,
-          ALLOWED_STATES.COMPLETED,
-        ],
-      },
+      status: { $in: releasableStatuses },
     });
 
     if (!trade) {
@@ -685,12 +704,7 @@ module.exports = {
         // 🔒 Re-fetch trade INSIDE tx
         const tradeTx = await P2PTrade.findOne({
           reference: normalizedReference,
-          status: {
-            $in: [
-              ALLOWED_STATES.PAYMENT_CONFIRMED_BY_BUYER,
-              ALLOWED_STATES.RELEASING,
-            ],
-          },
+          status: { $in: releasableStatuses }, // use the same array as outside
         }).session(session);
 
         if (!tradeTx) {

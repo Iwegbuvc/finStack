@@ -66,25 +66,7 @@ const createMerchantAd = async (req, res) => {
         .status(403)
         .json({ message: "Merchant must complete KYC verification." });
     }
-
-    // 🔑 CRYPTO-ONLY PLATFORM FEE
-    // const feeConfig = await FeeConfig.findOne({ type: "P2P", currency: asset });
-
-    // if (!feeConfig) {
-    //   return res.status(400).json({
-    //     message: `Platform fee not configured for ${asset}`
-    //   });
-    // }
-
-    // const feeRate = feeConfig.feeAmount || 0;
-    // const platformFeeCrypto = Number((availableAmount * feeRate).toFixed(8));
-
-    // Use the same logic as initiateTrade
-    // const feeValue = await getFlatFee("P2P", asset, fiat);
-    // const feeRate = Number(feeValue);
-
-    // const platformFeeCrypto = feeRate;
-    // SELL: balance & liquidity checks
+    // SELL ads require liquidity check
     if (type === "SELL") {
       const merchantWallet = await Wallet.findOne({
         user_id: userId,
@@ -402,6 +384,46 @@ const getMerchantOrders = async (req, res) => {
   }
 };
 
+// Delete (soft-delete) a Merchant Ad
+const deleteMerchantAd = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    // Fetch ad
+    const ad = await MerchantAd.findOne({ _id: id, userId });
+    if (!ad) {
+      return res.status(404).json({
+        success: false,
+        message: "Ad not found or you are not authorized to delete it.",
+      });
+    }
+
+    // Optional: Check if ad has active trades
+    const activeTrades = await p2pService.countActiveTradesForAd(id);
+    if (activeTrades > 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Cannot delete ad. There are active trades associated with this ad.",
+      });
+    }
+
+    // Soft-delete: mark status as CLOSED
+    ad.status = "CLOSED";
+    await ad.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Ad deleted successfully",
+      data: ad,
+    });
+  } catch (error) {
+    logger.error("Error deleting merchant ad:", error);
+    res.status(500).json({ success: false, message: "Internal server error" });
+  }
+};
+
 module.exports = {
   createMerchantAd,
   getAllAds,
@@ -409,4 +431,5 @@ module.exports = {
   updateMerchantAd,
   deactivateAd,
   getMerchantOrders,
+  deleteMerchantAd,
 };

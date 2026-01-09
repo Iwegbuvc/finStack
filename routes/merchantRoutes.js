@@ -10,6 +10,7 @@ const {
   deactivateAd,
   updateMerchantAd,
   getMerchantOrders,
+  deleteMerchantAd,
 } = require("../controllers/merchantController");
 
 //  PUBLIC ROUTES
@@ -48,6 +49,15 @@ router.get(
   walletLimiter,
   merchantOnly,
   getMerchantOrders
+);
+
+// Delete ad
+router.delete(
+  "/ads/:id",
+  verifyToken,
+  walletLimiter,
+  merchantOnly,
+  deleteMerchantAd
 );
 
 module.exports = router;
