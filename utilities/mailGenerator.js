@@ -33,9 +33,9 @@ const generateNewUserMail = (verificationCode, firstName) => {
                         <tr>
                             <td style="background-color: #2F67FA; border-radius: 5px;">
                                
-                                <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}"
-
-                                    style="display: inline-block; padding: 12px 30px; color: #ffffff; 
+                                <a href="${
+                                  process.env.FRONTEND_URL
+                                }/verify-email?token=${verificationCode}" style="display: inline-block; padding: 12px 30px; color: #ffffff; 
                                           text-decoration: none; font-weight: bold; font-size: 16px;">
                                     Verify Your Email
                                 </a>
@@ -46,7 +46,12 @@ const generateNewUserMail = (verificationCode, firstName) => {
                     <p style="line-height: 1.6; margin: 20px 0 0 0;">
                         If the button doesn't work, you can also copy and paste this link into your browser:
                         <br>
-                        <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.FRONTEND_URL}/verify-email/${verificationCode}</a>
+                        <a href="${
+                          process.env.FRONTEND_URL
+                        }/verify-email?token=${verificationCode}" style="color: #2F67FA; word-break: break-all;">
+                        ${
+                          process.env.FRONTEND_URL
+                        }/verify-email?token=${verificationCode}</a>
                     </p>
                 </td>
             </tr>
@@ -65,10 +70,10 @@ const generateNewUserMail = (verificationCode, firstName) => {
         </table>
     </body>
     </html>
-  `
-}
-const generateVerificationSuccessMail = (firstName) => { 
-    return `
+  `;
+};
+const generateVerificationSuccessMail = (firstName) => {
+  return `
     <!DOCTYPE html>
 <html>
 <head>
@@ -155,10 +160,10 @@ const generateVerificationSuccessMail = (firstName) => {
     </table>
 </body>
 </html>
-    `
-}
-const generateVerificationRequest = (firstName, verificationCode) => { 
-    return `
+    `;
+};
+const generateVerificationRequest = (firstName, verificationCode) => {
+  return `
         <!DOCTYPE html>
 <html>
 <head>
@@ -190,7 +195,9 @@ const generateVerificationRequest = (firstName, verificationCode) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" 
+                            <a href="${
+                              process.env.FRONTEND_URL
+                            }/verify-email/${verificationCode}" 
                                style="display: inline-block; padding: 14px 35px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Verify My Email
@@ -201,7 +208,11 @@ const generateVerificationRequest = (firstName, verificationCode) => {
                 
                 <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 14px;">
                     Or use this link:<br>
-                    <a href="${process.env.FRONTEND_URL}/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${process.env.URL}/verify/${verificationCode}</a>
+                    <a href="${
+                      process.env.FRONTEND_URL
+                    }/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${
+    process.env.URL
+  }/verify/${verificationCode}</a>
                 </p>
                 
                 <p style="line-height: 1.6; margin: 0; color: #666; font-size: 12px;">
@@ -235,11 +246,11 @@ const generateVerificationRequest = (firstName, verificationCode) => {
     </table>
 </body>
 </html>
-    `
-}
-const forgotPasswordMail = (firstName, resetPasswordToken) => { 
-    const date = getDatTimeUTC();
-    return `
+    `;
+};
+const forgotPasswordMail = (firstName, resetPasswordToken) => {
+  const date = getDatTimeUTC();
+  return `
         <!DOCTYPE html>
 <html>
 <head>
@@ -271,7 +282,9 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
                 <table border="0" cellpadding="0" cellspacing="0" style="margin: 0 auto 20px;">
                     <tr>
                         <td style="background-color: #2F67FA; border-radius: 5px;">
-                            <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}" 
+                            <a href="${
+                              process.env.FRONTEND_URL
+                            }/reset-password?token=${resetPasswordToken}" 
                                style="display: inline-block; padding: 14px 35px; color: #ffffff; 
                                       text-decoration: none; font-weight: bold; font-size: 16px;">
                                 Reset Password
@@ -282,7 +295,11 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
                 
                 <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 14px;">
                     Or copy and paste this link into your browser:<br>
-                    <a href="${process.env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}" style="color: #2F67FA; word-break: break-all;">${process.env.FRONTEND_URL}/reset-password?token=${resetPasswordToken}</a>
+                    <a href="${
+                      process.env.FRONTEND_URL
+                    }/reset-password?token=${resetPasswordToken}" style="color: #2F67FA; word-break: break-all;">${
+    process.env.FRONTEND_URL
+  }/reset-password?token=${resetPasswordToken}</a>
                 </p>
                 
                 <p style="line-height: 1.6; margin: 0; color: #666; font-size: 12px;">
@@ -316,11 +333,11 @@ const forgotPasswordMail = (firstName, resetPasswordToken) => {
     </table>
 </body>
 </html>
-    `
-}
+    `;
+};
 const generatePasswordResetMail = (firstName) => {
-    const date = getDatTimeUTC();
-    return `
+  const date = getDatTimeUTC();
+  return `
         <!DOCTYPE html>
 <html>
 <head>
@@ -395,12 +412,12 @@ const generatePasswordResetMail = (firstName) => {
     </table>
 </body>
 </html>
-    `
-}
+    `;
+};
 
-const generateAnnouncementMail = (title, body, firstName = 'User') => {
-    // Reusing the existing email structure (Header, Footer, styles) for consistency
-    return `
+const generateAnnouncementMail = (title, body, firstName = "User") => {
+  // Reusing the existing email structure (Header, Footer, styles) for consistency
+  return `
     <!DOCTYPE html>
     <html>
     <head>
@@ -421,7 +438,7 @@ const generateAnnouncementMail = (title, body, firstName = 'User') => {
                     <h2 style="color: #2F67FA; margin: 0 0 20px 0; font-size: 24px;">${title}</h2>
                     
                     <p style="line-height: 1.6; margin: 0 0 20px 0; font-size: 16px;">
-                        Hello ${firstName || 'User'},
+                        Hello ${firstName || "User"},
                     </p>
                     
                     <div style="line-height: 1.6; margin: 0 0 20px 0; font-size: 16px; border-left: 4px solid #2F67FA; padding-left: 15px;">
@@ -451,8 +468,12 @@ const generateAnnouncementMail = (title, body, firstName = 'User') => {
 };
 
 const escapeHtml = (str = "") =>
-  String(str).replace(/[&<>"']/g, m =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m])
+  String(str).replace(
+    /[&<>"']/g,
+    (m) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[
+        m
+      ])
   );
 
 const generateTradeAlertMail = ({
@@ -507,7 +528,6 @@ Login to process this trade.`,
   };
 };
 
-
 const generateBuyerPaidMail = ({ firstName, reference, amount }) => ({
   subject: "Buyer marked payment as sent",
   html: `<p>Hello ${firstName},</p>
@@ -515,11 +535,16 @@ const generateBuyerPaidMail = ({ firstName, reference, amount }) => ({
          <p><strong>Amount:</strong> ${amount}</p>
          <p><strong>Trade Ref:</strong> ${reference}</p>
          <p>Please verify that payment has been received.</p>`,
-  text: `Buyer marked payment as sent. Ref: ${reference}`
+  text: `Buyer marked payment as sent. Ref: ${reference}`,
 });
 
 // Inside mailGenerator.js
-const generateMerchantPaidMail = ({ firstName, reference, amount, currency }) => ({
+const generateMerchantPaidMail = ({
+  firstName,
+  reference,
+  amount,
+  currency,
+}) => ({
   subject: "Merchant has marked payment as sent",
   html: `
     <p>Hello ${firstName},</p>
@@ -528,14 +553,14 @@ const generateMerchantPaidMail = ({ firstName, reference, amount, currency }) =>
     <p><strong>Trade Ref:</strong> ${reference}</p>
     <p>Please check your bank account. Once confirmed, log in to release the crypto assets.</p>
   `,
-  text: `Hello ${firstName}, the merchant has marked trade ${reference} as paid. Please verify the receipt of ${amount} ${currency}.`
+  text: `Hello ${firstName}, the merchant has marked trade ${reference} as paid. Please verify the receipt of ${amount} ${currency}.`,
 });
 
 const generateAdminResolutionMail = ({
   firstName,
   reference,
   outcome, // "RELEASED" | "CANCELLED"
-  role,    // "buyer" | "merchant"
+  role, // "buyer" | "merchant"
 }) => {
   const actionText =
     outcome === "RELEASED"
@@ -557,8 +582,19 @@ If you have questions, please contact support.`,
       <p>
         If you have any questions, please contact support.
       </p>
-    `
+    `,
   };
 };
 
-module.exports = {generateNewUserMail, generateVerificationSuccessMail, generateVerificationRequest, forgotPasswordMail, generatePasswordResetMail, generateAnnouncementMail, generateTradeAlertMail, generateBuyerPaidMail, generateMerchantPaidMail,generateAdminResolutionMail};
+module.exports = {
+  generateNewUserMail,
+  generateVerificationSuccessMail,
+  generateVerificationRequest,
+  forgotPasswordMail,
+  generatePasswordResetMail,
+  generateAnnouncementMail,
+  generateTradeAlertMail,
+  generateBuyerPaidMail,
+  generateMerchantPaidMail,
+  generateAdminResolutionMail,
+};
