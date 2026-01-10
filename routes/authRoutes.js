@@ -1,25 +1,43 @@
-const express = require("express")
-const router = express.Router()
-const authController = require("../controllers/authController")
+const express = require("express");
+const router = express.Router();
+const authController = require("../controllers/authController");
 const { verifyToken, isAdmin } = require("../middlewares/validateToken");
-const {validateNewUser, validateLogin, validatePassword} = require("../middlewares/validation")
-const { authLimiter } = require("../middlewares/rateLimiter")
+const {
+  validateNewUser,
+  validateLogin,
+  validatePassword,
+} = require("../middlewares/validation");
+const { authLimiter } = require("../middlewares/rateLimiter");
 
-router.post("/register", authLimiter, validateNewUser, authController.registerUser)
+router.post(
+  "/register",
+  authLimiter,
+  validateNewUser,
+  authController.registerUser
+);
 
-router.get("/verify/:verificationCode",  authController.verifyEmail);
+router.get("/verify/:verificationCode", authController.verifyEmail);
+router.post("/verify-email", authController.verifyEmail);
 
-router.post("/resend-verification", authLimiter, authController.resendVerificationCode)
+router.post(
+  "/resend-verification",
+  authLimiter,
+  authController.resendVerificationCode
+);
 
-router.post("/login", authLimiter, validateLogin, authController.loginUser)
+router.post("/login", authLimiter, validateLogin, authController.loginUser);
 
-router.post("/refresh-token", authController.handleRefreshToken)
+router.post("/refresh-token", authController.handleRefreshToken);
 
-router.post("/forgot-password", authLimiter, authController.forgotPassword)
+router.post("/forgot-password", authLimiter, authController.forgotPassword);
 
-router.post("/reset-password", authLimiter, validatePassword, authController.resetPassword)
+router.post(
+  "/reset-password",
+  authLimiter,
+  validatePassword,
+  authController.resetPassword
+);
 
 router.post("/logout", authController.logoutUser);
 
-
-module.exports = router
+module.exports = router;
