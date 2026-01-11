@@ -211,7 +211,7 @@ const generateVerificationRequest = (firstName, verificationCode) => {
                     <a href="${
                       process.env.FRONTEND_URL
                     }/verify-email/${verificationCode}" style="color: #2F67FA; word-break: break-all;">${
-    process.env.URL
+    process.env.FRONTEND_URL
   }/verify/${verificationCode}</a>
                 </p>
                 
