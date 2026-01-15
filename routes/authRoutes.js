@@ -16,7 +16,7 @@ router.post(
   authController.registerUser
 );
 
-router.get("/verify/:verificationCode", authController.verifyEmail);
+// router.get("/verify/:verificationCode", authController.verifyEmail);
 router.post("/verify-email", authController.verifyEmail);
 
 router.post(

@@ -1,74 +1,87 @@
-  //   require("dotenv").config();
-  // const axios = require("axios");
+// require("dotenv").config();
+// const axios = require("axios");
 
-  // const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY;
-  // const PREMBLY_APP_ID = process.env.PREMBLY_APP_ID;
+// const PREMBLY_API_KEY = process.env.PREMBLY_API_KEY;
+// const PREMBLY_APP_ID = process.env.PREMBLY_API_ID;
+// const PREMBLY_BASE = process.env.PREMBLY_BASE_URL || "https://api.prembly.com";
 
-  // const headers = {
-  //   "x-api-key": PREMBLY_API_KEY,
-  //   "app-id": PREMBLY_APP_ID,
-  //   "Content-Type": "application/json",
-  // };
+// const prembly = axios.create({
+//   baseURL: PREMBLY_BASE,
+//   timeout: parseInt(process.env.PREMBLY_TIMEOUT_MS || "15000", 10),
+//   headers: {
+//     "x-api-key": PREMBLY_API_KEY,
+//     "app-id": PREMBLY_APP_ID,
+//     "Content-Type": "application/json",
+//   },
+// });
 
-  // // Detect environment
-  // const isProduction = process.env.NODE_ENV === "production";
+// prembly.interceptors.response.use(
+//   (res) => res,
+//   (err) => {
+//     err.isPremblyError = true;
+//     return Promise.reject(err);
+//   }
+// );
 
-  // // 🌍 Use correct base depending on mode
-  // const BASE_URL = "https://api.prembly.com";
+// // simple retry wrapper
+// async function requestWithRetry(fn, retries = 2, delayMs = 700) {
+//   let lastErr;
 
-  // /**
-  //  * 🔍 Verify BVN
-  //  */
-  // async function verifyBVN(bvn) {
-  //   try {
-  //     const url = `${BASE_URL}/verification/bvn_validation`;
-  //     console.log("🔍 Calling BVN endpoint:", url);
+//   for (let i = 0; i <= retries; i++) {
+//     try {
+//       return await fn();
+//     } catch (err) {
+//       lastErr = err;
 
-  //     const response = await axios.post(
-  //       url,
-  //       { number: bvn },
-  //       { headers, timeout: 20000 } // 20s timeout
-  //     );
+//       // 🔴 LOG PREMBLY ERROR PAYLOAD
+//       if (err.response) {
+//         console.error("PREMBLY ERROR:", {
+//           status: err.response.status,
+//           data: err.response.data,
+//         });
+//       } else {
+//         console.error("PREMBLY NETWORK ERROR:", err.message);
+//       }
 
-  //     console.log("✅ BVN verification response:", response.data);
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error(
-  //       "❌ BVN verification error:",
-  //       error.response?.data || error.message
-  //     );
-  //     throw new Error("Failed to verify BVN");
-  //   }
-  // }
+//       // Decide if retryable
+//       const status = err.response?.status;
+//       if (status && status < 500) break; // don't retry 4xx errors
 
-  // /**
-  //  * 🔍 Verify NIN
-  //  */
-  // async function verifyNIN(nin) {
-  //   try {
-  //     const url = `${BASE_URL}/verification/vnin`;
-  //     console.log("🔍 Calling NIN endpoint:", url);
+//       if (i < retries) {
+//         await new Promise((r) => setTimeout(r, delayMs));
+//       }
+//     }
+//   }
 
-  //     const response = await axios.post(
-  //       url,
-  //       { number: nin },
-  //       { headers, timeout: 20000 }
-  //     );
+//   throw lastErr;
+// }
 
-  //     console.log("✅ NIN verification response:", response.data);
-  //     return response.data;
-  //   } catch (error) {
-  //     console.error(
-  //       "❌ NIN verification error:",
-  //       error.response?.data || error.message
-  //     );
-  //     throw new Error("Failed to verify NIN");
-  //   }
-  // }
+// async function verifyBVN(bvn) {
+//   const url = `/verification/bvn_validation`;
+//   return requestWithRetry(() => prembly.post(url, { number: bvn }));
+// }
 
-  // module.exports = { verifyBVN, verifyNIN };
+// async function verifyNIN(nin) {
+//   const url = `/verification/vnin`;
+//   //api.prembly.com/verification/vnin
+//   https: return requestWithRetry(() => prembly.post(url, { number: nin }));
+// }
 
-//NEW: services/prembly.js
+// async function verifyLiveliness(base64Image) {
+//   const url = `/verification/biometrics/face/liveliness_check`;
+//   return requestWithRetry(
+//     () => prembly.post(url, { image: base64Image }),
+//     2,
+//     800
+//   );
+// }
+
+// module.exports = {
+//   verifyBVN,
+//   verifyNIN,
+//   verifyLiveliness,
+// };
+
 require("dotenv").config();
 const axios = require("axios");
 
@@ -86,6 +99,14 @@ const prembly = axios.create({
   },
 });
 
+prembly.interceptors.response.use(
+  (res) => res,
+  (err) => {
+    err.isPremblyError = true;
+    return Promise.reject(err);
+  }
+);
+
 // simple retry wrapper
 async function requestWithRetry(fn, retries = 2, delayMs = 700) {
   let lastErr;
@@ -94,28 +115,61 @@ async function requestWithRetry(fn, retries = 2, delayMs = 700) {
       return await fn();
     } catch (err) {
       lastErr = err;
-      // decide if retryable: network errors, 5xx
+
+      if (err.response) {
+        console.error("PREMBLY ERROR:", {
+          status: err.response.status,
+          data: err.response.data,
+        });
+      } else {
+        console.error("PREMBLY NETWORK ERROR:", err.message);
+      }
+
       const status = err.response?.status;
-      if (status && status < 500) break; // don't retry 4xx
-      if (i < retries) await new Promise(r => setTimeout(r, delayMs));
+      if (status && status < 500) break;
+
+      if (i < retries) {
+        await new Promise((r) => setTimeout(r, delayMs));
+      }
     }
   }
   throw lastErr;
 }
 
+// BVN Basic
 async function verifyBVN(bvn) {
-  const url = `/verification/bvn_validation`;
-  return requestWithRetry(() => prembly.post(url, { number: bvn }));
+  if (!bvn || !/^\d{11}$/.test(bvn)) {
+    throw new Error("Invalid BVN format (must be 11 digits)");
+  }
+
+  return requestWithRetry(() =>
+    prembly.post("/verification/bvn_validation", { number: bvn })
+  );
 }
 
+// NIN Basic
 async function verifyNIN(nin) {
-  const url = `/verification/vnin`;
-  return requestWithRetry(() => prembly.post(url, { number: nin }));
+  if (!nin || !/^\d{11}$/.test(nin)) {
+    throw new Error("Invalid NIN format (must be 11 digits)");
+  }
+
+  return requestWithRetry(() =>
+    prembly.post("/verification/vnin-basic", { number: nin })
+  );
 }
 
+// Liveliness (Face Biometrics)
 async function verifyLiveliness(base64Image) {
-  const url = `/verification/biometrics/face/liveliness_check`;
-  return requestWithRetry(() => prembly.post(url, { image: base64Image }), 2, 800);
+  if (!base64Image) throw new Error("Base64 image is required");
+
+  return requestWithRetry(
+    () =>
+      prembly.post("/verification/biometrics/face/liveliness_check", {
+        image: base64Image,
+      }),
+    2,
+    800
+  );
 }
 
 module.exports = {
